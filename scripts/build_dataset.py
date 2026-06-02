@@ -10,6 +10,7 @@ from pathlib import Path
 
 from PIL import Image
 from pypdf import PdfReader
+from pypdf.generic import ContentStream
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,10 +30,14 @@ PDF_URL = (
 )
 
 QUESTION_START_RE = re.compile(r"^(\d{4,5})\s+(.+)$")
-ANSWER_RE = re.compile(r"\s+(VERO|FALSO)\s*$")
+ANSWER_RE = re.compile(r"(VERO|FALSO)\s*$")
 TOPIC_RE = re.compile(r"Quesito n.\s*(\d+)\s*-\s*(.+)", re.IGNORECASE)
 TABLE_MARKER = "Testo domanda Risposta Corretta Immagine"
 VISUAL_REFERENCE_RE = re.compile(r"\b(raffigurat\w*|figura)\b", re.IGNORECASE)
+QUESTION_ID_RE = re.compile(r"^\d{4,5}$")
+QUESTION_ID_COLUMN_MAX_X = 60
+IMAGE_COLUMN_MIN_X = 400
+IMAGE_MATCH_MAX_DISTANCE = 100
 
 
 def clean_line(line: str) -> str:
@@ -115,6 +120,122 @@ def parse_questions(lines: list[str], topic: str | None) -> list[dict]:
 def image_hash_size_and_format(data: bytes) -> tuple[str, tuple[int, int], str | None]:
     image = Image.open(BytesIO(data))
     return hashlib.sha256(data).hexdigest()[:16], image.size, image.format
+
+
+def multiply_pdf_matrix(left: list[float], right: list[float]) -> list[float]:
+    a, b, c, d, e, f = left
+    g, h, i, j, k, l = right
+    return [
+        a * g + c * h,
+        b * g + d * h,
+        a * i + c * j,
+        b * i + d * j,
+        a * k + c * l + e,
+        b * k + d * l + f,
+    ]
+
+
+def bbox_from_matrix(matrix: list[float]) -> tuple[float, float, float, float]:
+    a, b, c, d, e, f = matrix
+    xs = [e, a + e, c + e, a + c + e]
+    ys = [f, b + f, d + f, b + d + f]
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def page_question_y_positions(page) -> dict[int, float]:
+    positions: dict[int, float] = {}
+
+    def visitor(text, _cm, tm, _font_dict, _font_size) -> None:
+        line = clean_line(str(text))
+        if not QUESTION_ID_RE.match(line):
+            return
+
+        x = float(tm[4])
+        if x <= QUESTION_ID_COLUMN_MAX_X:
+            positions[int(line)] = float(tm[5])
+
+    page.extract_text(visitor_text=visitor)
+    return positions
+
+
+def page_image_placements(page, reader: PdfReader, saved_images: dict[str, bytes]) -> list[dict]:
+    image_hash_by_name: dict[str, str] = {}
+    for image_file_object in page.images:
+        data = image_file_object.data
+        image_hash, size, image_format = image_hash_size_and_format(data)
+        if image_format == "PNG" and size == (106, 119):
+            continue
+        saved_images.setdefault(image_hash, data)
+        image_hash_by_name[Path(image_file_object.name).stem] = image_hash
+
+    if not image_hash_by_name:
+        return []
+
+    placements: list[dict] = []
+    stack: list[list[float]] = []
+    current_matrix = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0]
+    content = page.get_contents()
+    if content is None:
+        return placements
+
+    stream = ContentStream(content, reader)
+    for operands, operator in stream.operations:
+        if operator == b"q":
+            stack.append(current_matrix[:])
+        elif operator == b"Q":
+            current_matrix = stack.pop() if stack else [1.0, 0.0, 0.0, 1.0, 0.0, 0.0]
+        elif operator == b"cm":
+            current_matrix = multiply_pdf_matrix(current_matrix, [float(value) for value in operands])
+        elif operator == b"Do":
+            image_name = str(operands[0]).lstrip("/")
+            image_hash = image_hash_by_name.get(image_name)
+            if not image_hash:
+                continue
+
+            left, bottom, right, top = bbox_from_matrix(current_matrix)
+            if left < IMAGE_COLUMN_MIN_X:
+                continue
+
+            placements.append(
+                {
+                    "hash": image_hash,
+                    "center_y": (bottom + top) / 2,
+                }
+            )
+
+    return placements
+
+
+def assign_images_by_position(
+    page,
+    reader: PdfReader,
+    rows_by_segment: list[list[dict]],
+    saved_images: dict[str, bytes],
+) -> list[str]:
+    anomalies: list[str] = []
+    visual_rows = [row for rows in rows_by_segment for row in rows if row_needs_image(row)]
+    if not visual_rows:
+        page_image_placements(page, reader, saved_images)
+        return anomalies
+
+    question_y_by_id = page_question_y_positions(page)
+    placements = page_image_placements(page, reader, saved_images)
+    if not placements:
+        return anomalies
+
+    for row in visual_rows:
+        question_y = question_y_by_id.get(row["id"])
+        if question_y is None:
+            continue
+
+        closest = min(placements, key=lambda placement: abs(placement["center_y"] - question_y))
+        distance = abs(closest["center_y"] - question_y)
+        if distance > IMAGE_MATCH_MAX_DISTANCE:
+            continue
+
+        row["image"] = f"assets/signs/{closest['hash']}.jpg"
+
+    return anomalies
 
 
 def page_image_hashes(page, saved_images: dict[str, bytes]) -> list[str]:
@@ -240,10 +361,13 @@ def build_questions() -> tuple[list[dict], dict[str, bytes], list[str]]:
             parse_questions(segment, last_topic if segment_index == 0 else page_topic)
             for segment_index, segment in enumerate(segments)
         ]
-        image_hashes = page_image_hashes(page, saved_images)
 
+        image_hashes = page_image_hashes(page, saved_images)
         last_image_hash, page_anomalies = assign_images(
             rows_by_segment, image_hashes, last_image_hash
+        )
+        page_anomalies.extend(
+            assign_images_by_position(page, reader, rows_by_segment, saved_images)
         )
         anomalies.extend(f"page {page_index + 1}: {message}" for message in page_anomalies)
 
