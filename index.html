@@ -25,28 +25,38 @@
       </header>
 
       <main>
-        <section class="status-panel" aria-label="Stato della scheda">
-          <div>
-            <span class="status-label">Domanda</span>
-            <strong id="questionCounter">1/30</strong>
+        <section class="exam-status" aria-label="Stato della scheda">
+          <div class="status-row">
+            <div>
+              <span class="status-label">Domanda</span>
+              <strong id="questionCounter">1/30</strong>
+            </div>
+            <div>
+              <span class="status-label">Tempo</span>
+              <strong id="timer">20:00</strong>
+            </div>
+            <div>
+              <span class="status-label">Risposte</span>
+              <strong id="answeredCounter">0/30</strong>
+            </div>
+            <div>
+              <span class="status-label">Soglia</span>
+              <strong id="threshold">3 errori</strong>
+            </div>
+            <button
+              class="ghost-button drawer-toggle"
+              id="questionDrawerButton"
+              type="button"
+              aria-controls="questionDrawer"
+              aria-expanded="false"
+            >
+              Domande
+            </button>
           </div>
-          <div>
-            <span class="status-label">Tempo</span>
-            <strong id="timer">20:00</strong>
-          </div>
-          <div>
-            <span class="status-label">Risposte</span>
-            <strong id="answeredCounter">0/30</strong>
-          </div>
-          <div>
-            <span class="status-label">Soglia</span>
-            <strong id="threshold">3 errori</strong>
+          <div class="progress-track" aria-hidden="true">
+            <div id="progressBar"></div>
           </div>
         </section>
-
-        <div class="progress-track" aria-hidden="true">
-          <div id="progressBar"></div>
-        </div>
 
         <section class="question-panel" id="questionPanel" aria-live="polite">
           <div class="question-media" id="questionMedia" hidden>
@@ -73,7 +83,7 @@
           </div>
         </section>
 
-        <nav class="question-dots" id="questionDots" aria-label="Domande della scheda"></nav>
+        <nav class="question-dots desktop-dots" id="questionDots" aria-label="Domande della scheda"></nav>
 
         <section class="results-panel" id="resultsPanel" hidden>
           <div class="result-hero">
@@ -104,5 +114,24 @@
         <span id="offlineStatus">PWA</span>
       </footer>
     </div>
+
+    <div class="drawer-backdrop" id="drawerBackdrop" hidden></div>
+    <aside
+      class="question-drawer"
+      id="questionDrawer"
+      aria-labelledby="questionDrawerTitle"
+      aria-modal="true"
+      role="dialog"
+      hidden
+    >
+      <div class="drawer-header">
+        <div>
+          <span class="status-label">Navigazione</span>
+          <h2 id="questionDrawerTitle">Domande</h2>
+        </div>
+        <button class="ghost-button" id="closeDrawerButton" type="button">Chiudi</button>
+      </div>
+      <nav class="question-dots drawer-dots" id="drawerQuestionDots" aria-label="Domande della scheda"></nav>
+    </aside>
   </body>
 </html>

@@ -22,7 +22,12 @@ const els = {
   finishButton: document.getElementById("finishButton"),
   newExamButton: document.getElementById("newExamButton"),
   installButton: document.getElementById("installButton"),
+  questionDrawerButton: document.getElementById("questionDrawerButton"),
+  closeDrawerButton: document.getElementById("closeDrawerButton"),
+  drawerBackdrop: document.getElementById("drawerBackdrop"),
+  questionDrawer: document.getElementById("questionDrawer"),
   questionDots: document.getElementById("questionDots"),
+  drawerQuestionDots: document.getElementById("drawerQuestionDots"),
   resultsPanel: document.getElementById("resultsPanel"),
   resultLabel: document.getElementById("resultLabel"),
   resultTitle: document.getElementById("resultTitle"),
@@ -56,9 +61,16 @@ function init() {
   els.prevButton.addEventListener("click", () => moveBy(-1));
   els.nextButton.addEventListener("click", () => moveBy(1));
   els.finishButton.addEventListener("click", () => finishExam("manual"));
+  els.questionDrawerButton.addEventListener("click", openQuestionDrawer);
+  els.closeDrawerButton.addEventListener("click", closeQuestionDrawer);
+  els.drawerBackdrop.addEventListener("click", closeQuestionDrawer);
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeQuestionDrawer();
+  });
   els.newExamButton.addEventListener("click", () => {
     state = createExam();
     persistSession();
+    closeQuestionDrawer();
     render();
   });
 
@@ -161,21 +173,42 @@ function render() {
 
 function renderDots() {
   els.questionDots.innerHTML = "";
+  els.drawerQuestionDots.innerHTML = "";
   state.questions.forEach((question, index) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "question-dot";
-    button.textContent = String(index + 1);
-    button.setAttribute("aria-label", `Domanda ${index + 1}`);
-    button.classList.toggle("current", index === state.currentIndex);
-    button.classList.toggle("answered", state.answers[index] !== null);
-    button.addEventListener("click", () => {
-      state.currentIndex = index;
-      persistSession();
-      render();
-    });
-    els.questionDots.append(button);
+    els.questionDots.append(createDotButton(index));
+    els.drawerQuestionDots.append(createDotButton(index, true));
   });
+}
+
+function createDotButton(index, closesDrawer = false) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "question-dot";
+  button.textContent = String(index + 1);
+  button.setAttribute("aria-label", `Domanda ${index + 1}`);
+  button.classList.toggle("current", index === state.currentIndex);
+  button.classList.toggle("answered", state.answers[index] !== null);
+  button.addEventListener("click", () => {
+    state.currentIndex = index;
+    persistSession();
+    if (closesDrawer) closeQuestionDrawer();
+    render();
+  });
+  return button;
+}
+
+function openQuestionDrawer() {
+  els.questionDrawer.hidden = false;
+  els.drawerBackdrop.hidden = false;
+  document.body.classList.add("drawer-open");
+  els.questionDrawerButton.setAttribute("aria-expanded", "true");
+}
+
+function closeQuestionDrawer() {
+  els.questionDrawer.hidden = true;
+  els.drawerBackdrop.hidden = true;
+  document.body.classList.remove("drawer-open");
+  els.questionDrawerButton.setAttribute("aria-expanded", "false");
 }
 
 function moveBy(delta) {
@@ -221,6 +254,7 @@ function renderResults() {
   const result = calculateResult();
   els.questionPanel.hidden = true;
   els.resultsPanel.hidden = false;
+  closeQuestionDrawer();
   els.progressBar.style.width = "100%";
   els.questionCounter.textContent = `${state.questions.length}/${state.questions.length}`;
   els.answeredCounter.textContent = `${state.answers.filter((item) => item !== null).length}/${state.questions.length}`;
@@ -238,30 +272,68 @@ function renderReviewList() {
   els.reviewList.innerHTML = "";
   state.questions.forEach((question, index) => {
     const answer = state.answers[index];
-    if (answer === question.correct) return;
+    const isCorrect = answer === question.correct;
 
     const item = document.createElement("article");
     item.className = "review-item";
+    item.classList.toggle("review-item-correct", isCorrect);
+
+    if (question.image) {
+      const image = document.createElement("img");
+      image.src = question.image;
+      image.alt = `Figura ministeriale per la domanda ${question.id}`;
+      item.append(image);
+    }
+
+    const meta = document.createElement("div");
+    meta.className = "review-meta";
+
+    const status = document.createElement("span");
+    status.className = `result-pill ${isCorrect ? "result-pill-correct" : "result-pill-error"}`;
+    status.textContent = answer === null ? "Non risposta" : isCorrect ? "Corretta" : "Incorretta";
+
+    const topic = document.createElement("span");
+    topic.className = "topic-chip";
+    topic.textContent = question.topic;
+    meta.append(status, topic);
 
     const text = document.createElement("p");
     text.textContent = question.text;
 
-    const selected = document.createElement("span");
-    selected.textContent = `Risposta: ${answer === null ? "non data" : labelAnswer(answer)}`;
+    const comparison = document.createElement("div");
+    comparison.className = "answer-comparison";
 
-    const correct = document.createElement("span");
-    correct.textContent = `Corretta: ${labelAnswer(question.correct)}`;
+    comparison.append(
+      createAnswerPill("Hai scelto", answer, isCorrect, answer === null),
+      createAnswerPill("Corretta", question.correct, true),
+    );
 
-    item.append(text, selected, correct);
+    const explanation = document.createElement("p");
+    explanation.className = "explanation";
+    explanation.textContent = explanationFor(question);
+
+    item.append(meta, text, comparison, explanation);
     els.reviewList.append(item);
   });
+}
 
-  if (!els.reviewList.children.length) {
-    const item = document.createElement("article");
-    item.className = "review-item";
-    item.textContent = "Nessun errore.";
-    els.reviewList.append(item);
-  }
+function createAnswerPill(label, value, isCorrect, isMissing = false) {
+  const pill = document.createElement("span");
+  pill.className = `answer-pill ${isCorrect ? "answer-pill-correct" : "answer-pill-wrong"}`;
+
+  const labelNode = document.createElement("small");
+  labelNode.textContent = label;
+
+  const valueNode = document.createElement("strong");
+  valueNode.textContent = isMissing ? "Non data" : labelAnswer(value);
+
+  pill.append(labelNode, valueNode);
+  return pill;
+}
+
+function explanationFor(question) {
+  const correct = labelAnswer(question.correct);
+  return `Risposta corretta: ${correct}. La banca ministeriale pubblica risposta e figura, ma non una spiegazione testuale ufficiale per questa domanda.`;
 }
 
 function persistResult() {
