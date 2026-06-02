@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f3d3e" />
+    <title>Quiz Patente AB</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
+    <link rel="stylesheet" href="styles.css" />
+    <script defer src="data/questions.js"></script>
+    <script type="module" src="app.js"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <p>Simulazione ministeriale</p>
+          <h1>Quiz Patente AB</h1>
+        </div>
+        <div class="top-actions">
+          <button class="ghost-button" id="installButton" type="button" hidden>Installa</button>
+          <button class="primary-button" id="newExamButton" type="button">Nuova scheda</button>
+        </div>
+      </header>
+
+      <main>
+        <section class="status-panel" aria-label="Stato della scheda">
+          <div>
+            <span class="status-label">Domanda</span>
+            <strong id="questionCounter">1/30</strong>
+          </div>
+          <div>
+            <span class="status-label">Tempo</span>
+            <strong id="timer">20:00</strong>
+          </div>
+          <div>
+            <span class="status-label">Risposte</span>
+            <strong id="answeredCounter">0/30</strong>
+          </div>
+          <div>
+            <span class="status-label">Soglia</span>
+            <strong id="threshold">3 errori</strong>
+          </div>
+        </section>
+
+        <div class="progress-track" aria-hidden="true">
+          <div id="progressBar"></div>
+        </div>
+
+        <section class="question-panel" id="questionPanel" aria-live="polite">
+          <div class="question-media" id="questionMedia" hidden>
+            <img id="questionImage" alt="" />
+          </div>
+          <p class="topic" id="questionTopic">Quiz ministeriali</p>
+          <h2 id="questionText">Caricamento domanda...</h2>
+
+          <div class="answer-grid" aria-label="Risposte">
+            <button class="answer-button" data-answer="true" type="button">
+              <span>V</span>
+              Vero
+            </button>
+            <button class="answer-button" data-answer="false" type="button">
+              <span>F</span>
+              Falso
+            </button>
+          </div>
+
+          <div class="question-actions">
+            <button class="ghost-button" id="prevButton" type="button">Indietro</button>
+            <button class="ghost-button" id="nextButton" type="button">Avanti</button>
+            <button class="danger-button" id="finishButton" type="button">Concludi</button>
+          </div>
+        </section>
+
+        <nav class="question-dots" id="questionDots" aria-label="Domande della scheda"></nav>
+
+        <section class="results-panel" id="resultsPanel" hidden>
+          <div class="result-hero">
+            <p id="resultLabel">Esito</p>
+            <h2 id="resultTitle">Scheda completata</h2>
+            <span id="resultScore">0 errori</span>
+          </div>
+          <div class="result-grid">
+            <div>
+              <span class="status-label">Corrette</span>
+              <strong id="correctCount">0</strong>
+            </div>
+            <div>
+              <span class="status-label">Errori</span>
+              <strong id="errorCount">0</strong>
+            </div>
+            <div>
+              <span class="status-label">Tempo usato</span>
+              <strong id="usedTime">0:00</strong>
+            </div>
+          </div>
+          <div class="review-list" id="reviewList"></div>
+        </section>
+      </main>
+
+      <footer>
+        <span id="sourceInfo">Fonte ministeriale</span>
+        <span id="offlineStatus">PWA</span>
+      </footer>
+    </div>
+  </body>
+</html>
