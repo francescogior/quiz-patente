@@ -2,6 +2,7 @@ const bank = window.PATENTE_QUESTION_BANK;
 
 const STORAGE_KEY = "quiz-patente-session-v1";
 const HISTORY_KEY = "quiz-patente-history-v1";
+const AUTH_TOKEN_KEY = "quiz-patente-auth-token-v1";
 const settings = bank?.settings ?? { examQuestions: 30, examMinutes: 20, maxErrors: 3 };
 const allQuestions = bank?.questions ?? [];
 const explanationCache = new Map();
@@ -29,6 +30,7 @@ const els = {
   finishButton: document.getElementById("finishButton"),
   newExamButton: document.getElementById("newExamButton"),
   installButton: document.getElementById("installButton"),
+  accountButton: document.getElementById("accountButton"),
   questionDrawerButton: document.getElementById("questionDrawerButton"),
   mobileQuestionDrawerButton: document.getElementById("mobileQuestionDrawerButton"),
   closeDrawerButton: document.getElementById("closeDrawerButton"),
@@ -46,12 +48,32 @@ const els = {
   reviewList: document.getElementById("reviewList"),
   sourceInfo: document.getElementById("sourceInfo"),
   offlineStatus: document.getElementById("offlineStatus"),
+  modalBackdrop: document.getElementById("modalBackdrop"),
+  accountPanel: document.getElementById("accountPanel"),
+  closeAccountButton: document.getElementById("closeAccountButton"),
+  authSignedOut: document.getElementById("authSignedOut"),
+  authSignedIn: document.getElementById("authSignedIn"),
+  emailLoginForm: document.getElementById("emailLoginForm"),
+  codeLoginForm: document.getElementById("codeLoginForm"),
+  loginEmail: document.getElementById("loginEmail"),
+  loginCode: document.getElementById("loginCode"),
+  requestCodeButton: document.getElementById("requestCodeButton"),
+  verifyCodeButton: document.getElementById("verifyCodeButton"),
+  authStatus: document.getElementById("authStatus"),
+  accountEmail: document.getElementById("accountEmail"),
+  signOutButton: document.getElementById("signOutButton"),
+  progressTotal: document.getElementById("progressTotal"),
+  progressPassed: document.getElementById("progressPassed"),
+  progressAverage: document.getElementById("progressAverage"),
+  progressList: document.getElementById("progressList"),
 };
 
 let state = restoreSession() ?? createExam();
+let authState = { token: localStorage.getItem(AUTH_TOKEN_KEY), user: null, progress: null };
 let timerId = 0;
 let deferredInstallPrompt = null;
 let drawerClosingTimer = 0;
+let accountClosingTimer = 0;
 let explanationObserver = null;
 
 init();
@@ -62,9 +84,7 @@ function init() {
 
   els.answerButtons.forEach((button) => {
     button.addEventListener("click", () => {
-      state.answers[state.currentIndex] = button.dataset.answer === "true";
-      persistSession();
-      render();
+      answerCurrentQuestion(button.dataset.answer === "true");
     });
   });
 
@@ -75,8 +95,40 @@ function init() {
   els.mobileQuestionDrawerButton.addEventListener("click", openQuestionDrawer);
   els.closeDrawerButton.addEventListener("click", closeQuestionDrawer);
   els.drawerBackdrop.addEventListener("click", closeQuestionDrawer);
+  els.accountButton.addEventListener("click", openAccountPanel);
+  els.closeAccountButton.addEventListener("click", closeAccountPanel);
+  els.modalBackdrop.addEventListener("click", closeAccountPanel);
+  els.emailLoginForm.addEventListener("submit", requestLoginCode);
+  els.codeLoginForm.addEventListener("submit", verifyLoginCode);
+  els.loginCode.addEventListener("input", () => {
+    els.loginCode.value = els.loginCode.value.replace(/\D/g, "").slice(0, 6);
+  });
+  els.signOutButton.addEventListener("click", signOut);
   window.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") closeQuestionDrawer();
+    if (event.key === "Escape") {
+      closeQuestionDrawer();
+      closeAccountPanel();
+      return;
+    }
+
+    if (
+      state.finished ||
+      isTypingTarget(event.target) ||
+      document.body.classList.contains("drawer-open") ||
+      document.body.classList.contains("account-open")
+    ) {
+      return;
+    }
+
+    const key = event.key.toLowerCase();
+    if (key === "v") {
+      event.preventDefault();
+      answerCurrentQuestion(true);
+    }
+    if (key === "f") {
+      event.preventDefault();
+      answerCurrentQuestion(false);
+    }
   });
   els.newExamButton.addEventListener("click", () => {
     state = createExam();
@@ -101,6 +153,7 @@ function init() {
 
   registerServiceWorker();
   render();
+  initAuth();
   timerId = window.setInterval(tickTimer, 500);
 }
 
@@ -215,6 +268,19 @@ function createDotButton(index, closesDrawer = false) {
   return button;
 }
 
+function answerCurrentQuestion(value) {
+  state.answers[state.currentIndex] = value;
+  if (state.currentIndex < state.questions.length - 1) {
+    state.currentIndex += 1;
+  }
+  persistSession();
+  render();
+}
+
+function isTypingTarget(target) {
+  return ["INPUT", "SELECT", "TEXTAREA"].includes(target?.tagName) || target?.isContentEditable;
+}
+
 function openQuestionDrawer() {
   window.clearTimeout(drawerClosingTimer);
   els.questionDrawer.hidden = false;
@@ -264,6 +330,7 @@ function finishExam(reason) {
   state.finishedAt = Date.now();
   state.finishReason = reason;
   persistResult();
+  syncFinishedExam();
   localStorage.removeItem(STORAGE_KEY);
   renderResults();
 }
@@ -559,7 +626,234 @@ function createReportForm(questionId, explanation) {
   return form;
 }
 
-async function fetchJson(url, options) {
+async function initAuth() {
+  renderAuth();
+  if (!authState.token) return;
+
+  try {
+    const response = await authFetch("./api/auth-me");
+    authState.user = response.user;
+    authState.progress = response.progress;
+    renderAuth();
+  } catch {
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+    authState = { token: null, user: null, progress: null };
+    renderAuth();
+  }
+}
+
+function openAccountPanel() {
+  window.clearTimeout(accountClosingTimer);
+  els.accountPanel.hidden = false;
+  els.modalBackdrop.hidden = false;
+  requestAnimationFrame(() => {
+    document.body.classList.add("account-open");
+  });
+  if (authState.user) loadProgress();
+}
+
+function closeAccountPanel() {
+  window.clearTimeout(accountClosingTimer);
+  document.body.classList.remove("account-open");
+  accountClosingTimer = window.setTimeout(() => {
+    els.accountPanel.hidden = true;
+    els.modalBackdrop.hidden = true;
+  }, 260);
+}
+
+async function requestLoginCode(event) {
+  event.preventDefault();
+  const email = els.loginEmail.value.trim().toLowerCase();
+  if (!email) return;
+
+  els.requestCodeButton.disabled = true;
+  setAuthStatus("Invio codice...");
+
+  try {
+    await fetchJson("./api/auth-request", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
+    els.codeLoginForm.hidden = false;
+    els.loginCode.focus();
+    setAuthStatus("Codice inviato. Controlla la tua email.");
+  } catch (error) {
+    setAuthStatus(error.message || "Invio codice non riuscito.");
+  } finally {
+    els.requestCodeButton.disabled = false;
+  }
+}
+
+async function verifyLoginCode(event) {
+  event.preventDefault();
+  const email = els.loginEmail.value.trim().toLowerCase();
+  const code = els.loginCode.value.replace(/\D/g, "");
+  if (!email || code.length !== 6) {
+    setAuthStatus("Inserisci il codice a 6 cifre.");
+    return;
+  }
+
+  els.verifyCodeButton.disabled = true;
+  setAuthStatus("Verifica...");
+
+  try {
+    const response = await fetchJson("./api/auth-verify", {
+      method: "POST",
+      body: JSON.stringify({ email, code }),
+    });
+    authState.token = response.token;
+    authState.user = response.user;
+    authState.progress = response.progress;
+    localStorage.setItem(AUTH_TOKEN_KEY, response.token);
+    els.loginCode.value = "";
+    setAuthStatus("");
+    renderAuth();
+    await syncFinishedExam();
+  } catch (error) {
+    setAuthStatus(error.message || "Codice non valido.");
+  } finally {
+    els.verifyCodeButton.disabled = false;
+  }
+}
+
+async function signOut() {
+  const token = authState.token;
+  authState = { token: null, user: null, progress: null };
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+  renderAuth();
+  if (!token) return;
+
+  try {
+    await fetchJson("./api/auth-logout", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch {
+    // The local session is already gone; a stale remote token can expire naturally.
+  }
+}
+
+function renderAuth() {
+  const isSignedIn = Boolean(authState.user);
+  els.accountButton.textContent = isSignedIn ? "Progressi" : "Accedi";
+  els.authSignedOut.hidden = isSignedIn;
+  els.authSignedIn.hidden = !isSignedIn;
+
+  if (!isSignedIn) {
+    renderProgress(null);
+    return;
+  }
+
+  els.accountEmail.textContent = authState.user.email;
+  renderProgress(authState.progress);
+}
+
+function setAuthStatus(message) {
+  els.authStatus.textContent = message;
+}
+
+async function loadProgress() {
+  if (!authState.token) return;
+  try {
+    const response = await authFetch("./api/user-progress");
+    authState.progress = response.progress;
+    renderAuth();
+  } catch (error) {
+    renderProgress(null, error.message || "Progressi non disponibili.");
+  }
+}
+
+function renderProgress(progress, errorMessage = "") {
+  const summary = progress?.summary ?? { total: 0, passed: 0, averageErrors: 0 };
+  const recent = progress?.recent ?? [];
+
+  els.progressTotal.textContent = String(summary.total);
+  els.progressPassed.textContent = String(summary.passed);
+  els.progressAverage.textContent = formatAverage(summary.averageErrors);
+  els.progressList.innerHTML = "";
+
+  if (errorMessage) {
+    const item = document.createElement("p");
+    item.className = "progress-empty";
+    item.textContent = errorMessage;
+    els.progressList.append(item);
+    return;
+  }
+
+  if (recent.length === 0) {
+    const item = document.createElement("p");
+    item.className = "progress-empty";
+    item.textContent = "Nessuna simulazione salvata.";
+    els.progressList.append(item);
+    return;
+  }
+
+  recent.forEach((exam) => {
+    const item = document.createElement("article");
+    item.className = "progress-item";
+
+    const title = document.createElement("strong");
+    title.textContent = formatDate(exam.finishedAt);
+
+    const detail = document.createElement("span");
+    detail.textContent = `${exam.errorCount} ${exam.errorCount === 1 ? "errore" : "errori"} · ${formatDuration(exam.usedMs)}`;
+
+    const pill = document.createElement("span");
+    pill.className = `result-pill ${exam.passed ? "result-pill-correct" : "result-pill-error"}`;
+    pill.textContent = exam.passed ? "Promossa" : "Respinta";
+
+    item.append(title, detail, pill);
+    els.progressList.append(item);
+  });
+}
+
+async function syncFinishedExam() {
+  if (!authState.token || !state.finished) return;
+  try {
+    const response = await authFetch("./api/save-exam-result", {
+      method: "POST",
+      body: JSON.stringify(buildExamResultPayload()),
+    });
+    authState.progress = response.progress;
+    renderAuth();
+  } catch {
+    // Remote progress is a convenience layer; the completed quiz remains saved locally.
+  }
+}
+
+function buildExamResultPayload() {
+  const result = calculateResult();
+  return {
+    examId: state.id,
+    startedAt: new Date(state.startedAt).toISOString(),
+    finishedAt: new Date(state.finishedAt ?? Date.now()).toISOString(),
+    usedMs: result.usedMs,
+    totalQuestions: state.questions.length,
+    correctCount: result.correct,
+    errorCount: result.errors,
+    passed: result.passed,
+    finishReason: state.finishReason || "manual",
+    answers: state.questions.map((question, index) => ({
+      questionId: question.id,
+      topic: question.topic,
+      answer: state.answers[index],
+      correctAnswer: question.correct,
+      isCorrect: state.answers[index] === question.correct,
+    })),
+  };
+}
+
+async function authFetch(url, options = {}) {
+  return fetchJson(url, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${authState.token}`,
+      ...(options.headers ?? {}),
+    },
+  });
+}
+
+async function fetchJson(url, options = {}) {
   const response = await fetch(url, {
     ...options,
     headers: {
@@ -599,6 +893,22 @@ function formatDuration(ms) {
 
 function formatNumber(value) {
   return new Intl.NumberFormat("it-IT").format(value);
+}
+
+function formatAverage(value) {
+  return new Intl.NumberFormat("it-IT", {
+    maximumFractionDigits: 1,
+    minimumFractionDigits: value % 1 === 0 ? 0 : 1,
+  }).format(value || 0);
+}
+
+function formatDate(value) {
+  return new Intl.DateTimeFormat("it-IT", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
 }
 
 async function registerServiceWorker() {

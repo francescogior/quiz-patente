@@ -20,6 +20,7 @@
         </div>
         <div class="top-actions">
           <button class="ghost-button" id="installButton" type="button" hidden>Installa</button>
+          <button class="ghost-button" id="accountButton" type="button">Accedi</button>
           <button class="primary-button" id="newExamButton" type="button">Nuova scheda</button>
         </div>
       </header>
@@ -152,6 +153,75 @@
         <button class="ghost-button" id="closeDrawerButton" type="button">Chiudi</button>
       </div>
       <nav class="question-dots drawer-dots" id="drawerQuestionDots" aria-label="Domande della scheda"></nav>
+    </aside>
+
+    <div class="modal-backdrop" id="modalBackdrop" hidden></div>
+    <aside
+      class="account-panel"
+      id="accountPanel"
+      aria-labelledby="accountPanelTitle"
+      aria-modal="true"
+      role="dialog"
+      hidden
+    >
+      <div class="drawer-header">
+        <div>
+          <span class="status-label">Profilo</span>
+          <h2 id="accountPanelTitle">Progressi</h2>
+        </div>
+        <button class="ghost-button" id="closeAccountButton" type="button">Chiudi</button>
+      </div>
+
+      <div class="auth-card" id="authSignedOut">
+        <form class="auth-form" id="emailLoginForm">
+          <label>
+            <span>Email</span>
+            <input id="loginEmail" name="email" type="email" autocomplete="email" required />
+          </label>
+          <button class="primary-button" id="requestCodeButton" type="submit">Invia codice</button>
+        </form>
+        <form class="auth-form" id="codeLoginForm" hidden>
+          <label>
+            <span>Codice</span>
+            <input
+              id="loginCode"
+              name="code"
+              type="text"
+              inputmode="numeric"
+              autocomplete="one-time-code"
+              maxlength="6"
+              required
+            />
+          </label>
+          <button class="primary-button" id="verifyCodeButton" type="submit">Entra</button>
+        </form>
+        <p class="auth-status" id="authStatus" aria-live="polite"></p>
+      </div>
+
+      <div class="auth-card" id="authSignedIn" hidden>
+        <div class="account-head">
+          <div>
+            <span class="status-label">Account</span>
+            <strong id="accountEmail">utente</strong>
+          </div>
+          <button class="ghost-button" id="signOutButton" type="button">Esci</button>
+        </div>
+        <div class="progress-summary">
+          <div>
+            <span>Simulazioni</span>
+            <strong id="progressTotal">0</strong>
+          </div>
+          <div>
+            <span>Promosse</span>
+            <strong id="progressPassed">0</strong>
+          </div>
+          <div>
+            <span>Media errori</span>
+            <strong id="progressAverage">0</strong>
+          </div>
+        </div>
+        <div class="progress-list" id="progressList"></div>
+      </div>
     </aside>
   </body>
 </html>

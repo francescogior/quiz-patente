@@ -12,9 +12,11 @@ La banca dati viene dal Portale dell'Automobilista, sezione pubblica "Quiz per l
 
 Le domande grafiche senza associazione immagine sicura vengono escluse durante la generazione, per evitare schede con riferimenti a figure mancanti.
 
-La fonte ministeriale non include spiegazioni testuali per le singole risposte. Nel riepilogo l'app può generare spiegazioni AI per Vero e Falso, salvandole su Supabase per riusarle senza rigenerarle.
+La fonte ministeriale non include spiegazioni testuali per le singole risposte. Nel riepilogo l'app può generare spiegazioni AI, salvandole su Supabase per riusarle senza rigenerarle.
 
-## Spiegazioni AI
+Con Supabase e Resend configurati, l'app abilita anche un accesso passwordless via codice email e salva le simulazioni completate per mostrare i progressi dell'utente.
+
+## Backend leggero
 
 Variabili richieste:
 
