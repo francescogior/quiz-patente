@@ -8,10 +8,14 @@ const explanationCache = new Map();
 
 const els = {
   questionCounter: document.getElementById("questionCounter"),
+  mobileQuestionCounter: document.getElementById("mobileQuestionCounter"),
   answeredCounter: document.getElementById("answeredCounter"),
+  mobileAnsweredCounter: document.getElementById("mobileAnsweredCounter"),
   threshold: document.getElementById("threshold"),
   timer: document.getElementById("timer"),
+  mobileTimer: document.getElementById("mobileTimer"),
   progressBar: document.getElementById("progressBar"),
+  mobileProgressBar: document.getElementById("mobileProgressBar"),
   questionPanel: document.getElementById("questionPanel"),
   questionMedia: document.getElementById("questionMedia"),
   questionImage: document.getElementById("questionImage"),
@@ -24,6 +28,7 @@ const els = {
   newExamButton: document.getElementById("newExamButton"),
   installButton: document.getElementById("installButton"),
   questionDrawerButton: document.getElementById("questionDrawerButton"),
+  mobileQuestionDrawerButton: document.getElementById("mobileQuestionDrawerButton"),
   closeDrawerButton: document.getElementById("closeDrawerButton"),
   drawerBackdrop: document.getElementById("drawerBackdrop"),
   questionDrawer: document.getElementById("questionDrawer"),
@@ -44,6 +49,7 @@ const els = {
 let state = restoreSession() ?? createExam();
 let timerId = 0;
 let deferredInstallPrompt = null;
+let drawerClosingTimer = 0;
 
 init();
 
@@ -63,6 +69,7 @@ function init() {
   els.nextButton.addEventListener("click", () => moveBy(1));
   els.finishButton.addEventListener("click", () => finishExam("manual"));
   els.questionDrawerButton.addEventListener("click", openQuestionDrawer);
+  els.mobileQuestionDrawerButton.addEventListener("click", openQuestionDrawer);
   els.closeDrawerButton.addEventListener("click", closeQuestionDrawer);
   els.drawerBackdrop.addEventListener("click", closeQuestionDrawer);
   window.addEventListener("keydown", (event) => {
@@ -147,10 +154,15 @@ function render() {
   els.questionPanel.hidden = false;
   els.resultsPanel.hidden = true;
   els.questionPanel.classList.toggle("has-media", Boolean(question.image));
+  els.questionPanel.classList.toggle("no-media", !question.image);
   els.questionPanel.classList.toggle("has-answer", answer !== null);
   els.questionCounter.textContent = `${state.currentIndex + 1}/${state.questions.length}`;
+  els.mobileQuestionCounter.textContent = `${state.currentIndex + 1}/${state.questions.length}`;
   els.answeredCounter.textContent = `${answeredCount}/${state.questions.length}`;
-  els.progressBar.style.width = `${(answeredCount / state.questions.length) * 100}%`;
+  els.mobileAnsweredCounter.textContent = `${answeredCount}/${state.questions.length}`;
+  const progress = `${(answeredCount / state.questions.length) * 100}%`;
+  els.progressBar.style.width = progress;
+  els.mobileProgressBar.style.width = progress;
   els.questionTopic.textContent = question.topic;
   els.questionText.textContent = question.text;
 
@@ -159,7 +171,7 @@ function render() {
     els.questionImage.src = question.image;
     els.questionImage.alt = `Figura ministeriale per la domanda ${question.id}`;
   } else {
-    els.questionMedia.hidden = true;
+    els.questionMedia.hidden = false;
     els.questionImage.removeAttribute("src");
     els.questionImage.alt = "";
   }
@@ -201,17 +213,29 @@ function createDotButton(index, closesDrawer = false) {
 }
 
 function openQuestionDrawer() {
+  window.clearTimeout(drawerClosingTimer);
   els.questionDrawer.hidden = false;
   els.drawerBackdrop.hidden = false;
-  document.body.classList.add("drawer-open");
-  els.questionDrawerButton.setAttribute("aria-expanded", "true");
+  requestAnimationFrame(() => {
+    document.body.classList.add("drawer-open");
+    setDrawerExpanded(true);
+  });
 }
 
 function closeQuestionDrawer() {
-  els.questionDrawer.hidden = true;
-  els.drawerBackdrop.hidden = true;
+  window.clearTimeout(drawerClosingTimer);
   document.body.classList.remove("drawer-open");
-  els.questionDrawerButton.setAttribute("aria-expanded", "false");
+  setDrawerExpanded(false);
+  drawerClosingTimer = window.setTimeout(() => {
+    els.questionDrawer.hidden = true;
+    els.drawerBackdrop.hidden = true;
+  }, 260);
+}
+
+function setDrawerExpanded(isExpanded) {
+  const value = String(isExpanded);
+  els.questionDrawerButton.setAttribute("aria-expanded", value);
+  els.mobileQuestionDrawerButton.setAttribute("aria-expanded", value);
 }
 
 function moveBy(delta) {
@@ -227,6 +251,7 @@ function tickTimer() {
   if (state.finished) return;
   const remaining = Math.max(0, state.endsAt - Date.now());
   els.timer.textContent = formatDuration(remaining);
+  els.mobileTimer.textContent = formatDuration(remaining);
   if (remaining === 0) finishExam("timeout");
 }
 
@@ -260,8 +285,12 @@ function renderResults() {
   closeQuestionDrawer();
   els.progressBar.style.width = "100%";
   els.questionCounter.textContent = `${state.questions.length}/${state.questions.length}`;
+  els.mobileQuestionCounter.textContent = els.questionCounter.textContent;
   els.answeredCounter.textContent = `${state.answers.filter((item) => item !== null).length}/${state.questions.length}`;
+  els.mobileAnsweredCounter.textContent = els.answeredCounter.textContent;
   els.timer.textContent = formatDuration(Math.max(0, state.endsAt - (state.finishedAt ?? Date.now())));
+  els.mobileTimer.textContent = els.timer.textContent;
+  els.mobileProgressBar.style.width = "100%";
   els.resultLabel.textContent = result.passed ? "Promosso" : "Respinto";
   els.resultTitle.textContent = result.passed ? "Scheda superata" : "Troppi errori";
   els.resultScore.textContent = `${result.errors} ${result.errors === 1 ? "errore" : "errori"}`;
