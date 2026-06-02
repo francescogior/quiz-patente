@@ -12,7 +12,27 @@ La banca dati viene dal Portale dell'Automobilista, sezione pubblica "Quiz per l
 
 Le domande grafiche senza associazione immagine sicura vengono escluse durante la generazione, per evitare schede con riferimenti a figure mancanti.
 
-La fonte ministeriale non include spiegazioni testuali per le singole risposte. Nel riepilogo l'app mostra quindi risposta scelta, risposta corretta e una nota esplicita sulla fonte, senza generare spiegazioni non ufficiali.
+La fonte ministeriale non include spiegazioni testuali per le singole risposte. Nel riepilogo l'app può generare spiegazioni AI per Vero e Falso, salvandole su Supabase per riusarle senza rigenerarle.
+
+## Spiegazioni AI
+
+Variabili richieste:
+
+```bash
+cp .env.example .env.local
+```
+
+Poi compila `.env.local` e sincronizza le env production su Vercel:
+
+```bash
+node scripts/sync_vercel_env.mjs
+```
+
+Prima del deploy, crea le tabelle con `supabase/schema.sql` nel SQL Editor di Supabase. Puoi verificare che siano raggiungibili con:
+
+```bash
+node scripts/check_ai_setup.mjs
+```
 
 ## Avvio locale
 

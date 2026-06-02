@@ -4,6 +4,7 @@ const STORAGE_KEY = "quiz-patente-session-v1";
 const HISTORY_KEY = "quiz-patente-history-v1";
 const settings = bank?.settings ?? { examQuestions: 30, examMinutes: 20, maxErrors: 3 };
 const allQuestions = bank?.questions ?? [];
+const explanationCache = new Map();
 
 const els = {
   questionCounter: document.getElementById("questionCounter"),
@@ -310,9 +311,7 @@ function renderReviewList() {
       createAnswerPill("Corretta", question.correct, true),
     );
 
-    const explanation = document.createElement("p");
-    explanation.className = "explanation";
-    explanation.textContent = explanationFor(question);
+    const explanation = createAiExplanationPanel(question, answer);
 
     item.append(meta, text, comparison, explanation);
     els.reviewList.append(item);
@@ -333,9 +332,216 @@ function createAnswerPill(label, value, isCorrect, isMissing = false) {
   return pill;
 }
 
-function explanationFor(question) {
-  const correct = labelAnswer(question.correct);
-  return `Risposta corretta: ${correct}. La banca ministeriale pubblica risposta e figura, ma non una spiegazione testuale ufficiale per questa domanda.`;
+function createAiExplanationPanel(question, answer) {
+  const panel = document.createElement("section");
+  panel.className = "ai-explanation";
+  panel.dataset.questionId = String(question.id);
+
+  const header = document.createElement("div");
+  header.className = "ai-explanation-header";
+
+  const title = document.createElement("div");
+  const eyebrow = document.createElement("span");
+  eyebrow.className = "ai-eyebrow";
+  eyebrow.textContent = "AI";
+  const heading = document.createElement("h3");
+  heading.textContent = "Spiegazione";
+  title.append(eyebrow, heading);
+
+  const action = document.createElement("button");
+  action.className = "ghost-button ai-load-button";
+  action.type = "button";
+  action.textContent = explanationCache.has(question.id) ? "Mostra" : "Spiega V/F";
+
+  const body = document.createElement("div");
+  body.className = "ai-explanation-body";
+  body.hidden = !explanationCache.has(question.id);
+
+  header.append(title, action);
+  panel.append(header, body);
+
+  const cached = explanationCache.get(question.id);
+  if (cached) renderAiExplanationBody(body, question, answer, cached);
+
+  action.addEventListener("click", async () => {
+    if (explanationCache.has(question.id)) {
+      body.hidden = !body.hidden;
+      action.textContent = body.hidden ? "Mostra" : "Nascondi";
+      return;
+    }
+
+    action.disabled = true;
+    action.textContent = "Genero...";
+    body.hidden = false;
+    body.innerHTML = '<p class="ai-status">Sto preparando una spiegazione mirata per Vero e Falso.</p>';
+
+    try {
+      const response = await fetchJson("./api/explanation", {
+        method: "POST",
+        body: JSON.stringify({ questionId: question.id }),
+      });
+      explanationCache.set(question.id, response.explanation);
+      renderAiExplanationBody(body, question, answer, response.explanation);
+      action.textContent = response.source === "cache" ? "Da cache" : "Generata";
+    } catch (error) {
+      body.innerHTML = "";
+      const message = document.createElement("p");
+      message.className = "ai-status ai-status-error";
+      message.textContent =
+        error.message || "Non riesco a caricare la spiegazione in questo momento.";
+      body.append(message);
+      action.textContent = "Riprova";
+    } finally {
+      action.disabled = false;
+    }
+  });
+
+  return panel;
+}
+
+function renderAiExplanationBody(body, question, answer, explanation) {
+  body.innerHTML = "";
+
+  const intro = document.createElement("p");
+  intro.className = "ai-key-point";
+  intro.textContent = explanation.keyPoint;
+
+  const options = document.createElement("div");
+  options.className = "ai-option-grid";
+  options.append(
+    createAiOption("Vero", true, question.correct, answer, explanation.trueExplanation),
+    createAiOption("Falso", false, question.correct, answer, explanation.falseExplanation),
+  );
+
+  const footer = document.createElement("div");
+  footer.className = "ai-explanation-footer";
+
+  const meta = document.createElement("span");
+  meta.textContent = `Modello ${explanation.model || "AI"} · confidenza ${explanation.confidence || "media"}`;
+
+  const reportButton = document.createElement("button");
+  reportButton.className = "report-button";
+  reportButton.type = "button";
+  reportButton.textContent = "Segnala";
+
+  const reportForm = createReportForm(question.id, explanation);
+  reportForm.hidden = true;
+
+  reportButton.addEventListener("click", () => {
+    reportForm.hidden = !reportForm.hidden;
+  });
+
+  footer.append(meta, reportButton);
+  body.append(intro, options, footer, reportForm);
+}
+
+function createAiOption(label, value, correctAnswer, selectedAnswer, text) {
+  const option = document.createElement("article");
+  option.className = "ai-option";
+  option.classList.toggle("ai-option-correct", value === correctAnswer);
+  option.classList.toggle("ai-option-selected", selectedAnswer === value);
+
+  const badge = document.createElement("span");
+  badge.className = "ai-option-badge";
+  badge.textContent = label;
+
+  const tags = document.createElement("div");
+  tags.className = "ai-option-tags";
+  if (value === correctAnswer) tags.append(createMiniTag("Corretta"));
+  if (selectedAnswer === value) tags.append(createMiniTag("Scelta"));
+
+  const paragraph = document.createElement("p");
+  paragraph.textContent = text;
+
+  option.append(badge, tags, paragraph);
+  return option;
+}
+
+function createMiniTag(text) {
+  const tag = document.createElement("span");
+  tag.className = "mini-tag";
+  tag.textContent = text;
+  return tag;
+}
+
+function createReportForm(questionId, explanation) {
+  const form = document.createElement("form");
+  form.className = "report-form";
+
+  const select = document.createElement("select");
+  select.name = "reason";
+  select.setAttribute("aria-label", "Motivo della segnalazione");
+  [
+    ["wrong", "Spiegazione sbagliata"],
+    ["incomplete", "Incompleta"],
+    ["unclear", "Non chiara"],
+  ].forEach(([value, label]) => {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    select.append(option);
+  });
+
+  const message = document.createElement("textarea");
+  message.name = "message";
+  message.rows = 3;
+  message.maxLength = 600;
+  message.placeholder = "Aggiungi un dettaglio, se vuoi";
+
+  const submit = document.createElement("button");
+  submit.className = "primary-button report-submit";
+  submit.type = "submit";
+  submit.textContent = "Invia";
+
+  const status = document.createElement("p");
+  status.className = "report-status";
+
+  form.append(select, message, submit, status);
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    submit.disabled = true;
+    status.textContent = "Invio...";
+
+    try {
+      await fetchJson("./api/report-explanation", {
+        method: "POST",
+        body: JSON.stringify({
+          questionId,
+          reason: select.value,
+          message: message.value.trim(),
+          pageUrl: window.location.href,
+          explanation: {
+            model: explanation.model,
+            promptVersion: explanation.promptVersion,
+            confidence: explanation.confidence,
+          },
+        }),
+      });
+      status.textContent = "Segnalazione inviata. Grazie.";
+      message.value = "";
+    } catch (error) {
+      status.textContent = error.message || "Invio non riuscito.";
+    } finally {
+      submit.disabled = false;
+    }
+  });
+
+  return form;
+}
+
+async function fetchJson(url, options) {
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(options?.headers ?? {}),
+    },
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.error || "Richiesta non riuscita.");
+  }
+  return payload;
 }
 
 function persistResult() {
