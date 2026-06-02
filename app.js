@@ -411,16 +411,12 @@ function renderAiExplanationBody(body, question, answer, explanation) {
     ? explanation.trueExplanation
     : explanation.falseExplanation;
 
-  const intro = document.createElement("p");
-  intro.className = "ai-key-point";
-  intro.textContent = `Risposta corretta: ${labelAnswer(question.correct)}. ${explanation.keyPoint}`;
-
   const footer = document.createElement("div");
   footer.className = "ai-explanation-footer";
 
   const explanationText = document.createElement("p");
   explanationText.className = "single-explanation";
-  explanationText.textContent = correctExplanation;
+  explanationText.textContent = cleanExplanationText(correctExplanation);
 
   const reportButton = document.createElement("button");
   reportButton.className = "report-button";
@@ -435,7 +431,11 @@ function renderAiExplanationBody(body, question, answer, explanation) {
   });
 
   footer.append(reportButton);
-  body.append(intro, explanationText, footer, reportForm);
+  body.append(explanationText, footer, reportForm);
+}
+
+function cleanExplanationText(text) {
+  return String(text || "").replace(/^(vero|falso)\s*[:.-]\s*/i, "").trim();
 }
 
 function renderExplanationSkeleton(body) {

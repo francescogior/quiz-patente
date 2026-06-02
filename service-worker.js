@@ -1,6 +1,6 @@
 importScripts("./data/asset-manifest-sw.js");
 
-const CACHE_NAME = "quiz-patente-ab-v7";
+const CACHE_NAME = "quiz-patente-ab-v8";
 const CORE_ASSETS = [
   "./",
   "./index.html",
