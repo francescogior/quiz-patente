@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#0f3d3e" />
+    <meta name="theme-color" content="#082f2e" />
     <title>Quiz Patente AB</title>
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
@@ -15,7 +15,7 @@
     <div class="app-shell">
       <header class="topbar">
         <div class="brand">
-          <p>Simulazione ministeriale</p>
+          <p><span></span>Simulazione ministeriale</p>
           <h1>Quiz Patente AB</h1>
         </div>
         <div class="top-actions">
@@ -27,19 +27,19 @@
       <main>
         <section class="exam-status" aria-label="Stato della scheda">
           <div class="status-row">
-            <div>
+            <div class="status-card status-current">
               <span class="status-label">Domanda</span>
               <strong id="questionCounter">1/30</strong>
             </div>
-            <div>
+            <div class="status-card status-timer">
               <span class="status-label">Tempo</span>
               <strong id="timer">20:00</strong>
             </div>
-            <div>
+            <div class="status-card">
               <span class="status-label">Risposte</span>
               <strong id="answeredCounter">0/30</strong>
             </div>
-            <div>
+            <div class="status-card">
               <span class="status-label">Soglia</span>
               <strong id="threshold">3 errori</strong>
             </div>
@@ -66,13 +66,13 @@
           <h2 id="questionText">Caricamento domanda...</h2>
 
           <div class="answer-grid" aria-label="Risposte">
-            <button class="answer-button" data-answer="true" type="button">
-              <span>V</span>
-              Vero
+            <button class="answer-button answer-true" data-answer="true" type="button">
+              <span class="answer-key">V</span>
+              <span class="answer-copy">Vero</span>
             </button>
-            <button class="answer-button" data-answer="false" type="button">
-              <span>F</span>
-              Falso
+            <button class="answer-button answer-false" data-answer="false" type="button">
+              <span class="answer-key">F</span>
+              <span class="answer-copy">Falso</span>
             </button>
           </div>
 

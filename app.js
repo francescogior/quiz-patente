@@ -145,6 +145,8 @@ function render() {
 
   els.questionPanel.hidden = false;
   els.resultsPanel.hidden = true;
+  els.questionPanel.classList.toggle("has-media", Boolean(question.image));
+  els.questionPanel.classList.toggle("has-answer", answer !== null);
   els.questionCounter.textContent = `${state.currentIndex + 1}/${state.questions.length}`;
   els.answeredCounter.textContent = `${answeredCount}/${state.questions.length}`;
   els.progressBar.style.width = `${(answeredCount / state.questions.length) * 100}%`;
