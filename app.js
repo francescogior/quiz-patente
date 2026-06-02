@@ -5,6 +5,8 @@ const HISTORY_KEY = "quiz-patente-history-v1";
 const settings = bank?.settings ?? { examQuestions: 30, examMinutes: 20, maxErrors: 3 };
 const allQuestions = bank?.questions ?? [];
 const explanationCache = new Map();
+const explanationTargets = new WeakMap();
+const pendingExplanationLoads = new Set();
 
 const els = {
   questionCounter: document.getElementById("questionCounter"),
@@ -50,6 +52,7 @@ let state = restoreSession() ?? createExam();
 let timerId = 0;
 let deferredInstallPrompt = null;
 let drawerClosingTimer = 0;
+let explanationObserver = null;
 
 init();
 
@@ -302,13 +305,42 @@ function renderResults() {
 
 function renderReviewList() {
   els.reviewList.innerHTML = "";
+  explanationObserver?.disconnect();
+  explanationObserver = null;
+
   state.questions.forEach((question, index) => {
     const answer = state.answers[index];
     const isCorrect = answer === question.correct;
 
     const item = document.createElement("article");
     item.className = "review-item";
+    item.classList.toggle("review-item-error", !isCorrect);
     item.classList.toggle("review-item-correct", isCorrect);
+    item.classList.toggle("review-item-with-image", Boolean(question.image));
+
+    const meta = document.createElement("header");
+    meta.className = "review-meta";
+
+    const indexBadge = document.createElement("span");
+    indexBadge.className = "review-index";
+    indexBadge.textContent = `Domanda ${index + 1}`;
+
+    const status = document.createElement("span");
+    status.className = `result-pill ${isCorrect ? "result-pill-correct" : "result-pill-error"}`;
+    status.textContent = answer === null ? "Non risposta" : isCorrect ? "Corretta" : "Incorretta";
+
+    const comparison = document.createElement("div");
+    comparison.className = "answer-comparison";
+    comparison.append(
+      createAnswerPill("Hai scelto", answer, isCorrect, answer === null),
+      createAnswerPill("Corretta", question.correct, true),
+    );
+
+    const topic = document.createElement("span");
+    topic.className = "topic-chip";
+    topic.textContent = question.topic;
+    meta.append(indexBadge, status, topic, comparison);
+    item.append(meta);
 
     if (question.image) {
       const image = document.createElement("img");
@@ -317,32 +349,13 @@ function renderReviewList() {
       item.append(image);
     }
 
-    const meta = document.createElement("div");
-    meta.className = "review-meta";
-
-    const status = document.createElement("span");
-    status.className = `result-pill ${isCorrect ? "result-pill-correct" : "result-pill-error"}`;
-    status.textContent = answer === null ? "Non risposta" : isCorrect ? "Corretta" : "Incorretta";
-
-    const topic = document.createElement("span");
-    topic.className = "topic-chip";
-    topic.textContent = question.topic;
-    meta.append(status, topic);
-
     const text = document.createElement("p");
+    text.className = "review-question-text";
     text.textContent = question.text;
-
-    const comparison = document.createElement("div");
-    comparison.className = "answer-comparison";
-
-    comparison.append(
-      createAnswerPill("Hai scelto", answer, isCorrect, answer === null),
-      createAnswerPill("Corretta", question.correct, true),
-    );
 
     const explanation = createAiExplanationPanel(question, answer);
 
-    item.append(meta, text, comparison, explanation);
+    item.append(text, explanation);
     els.reviewList.append(item);
   });
 }
@@ -370,60 +383,23 @@ function createAiExplanationPanel(question, answer) {
   header.className = "ai-explanation-header";
 
   const title = document.createElement("div");
-  const eyebrow = document.createElement("span");
-  eyebrow.className = "ai-eyebrow";
-  eyebrow.textContent = "AI";
   const heading = document.createElement("h3");
   heading.textContent = "Spiegazione";
-  title.append(eyebrow, heading);
-
-  const action = document.createElement("button");
-  action.className = "ghost-button ai-load-button";
-  action.type = "button";
-  action.textContent = explanationCache.has(question.id) ? "Mostra" : "Spiega V/F";
+  title.append(heading);
 
   const body = document.createElement("div");
   body.className = "ai-explanation-body";
-  body.hidden = !explanationCache.has(question.id);
 
-  header.append(title, action);
+  header.append(title);
   panel.append(header, body);
 
   const cached = explanationCache.get(question.id);
-  if (cached) renderAiExplanationBody(body, question, answer, cached);
-
-  action.addEventListener("click", async () => {
-    if (explanationCache.has(question.id)) {
-      body.hidden = !body.hidden;
-      action.textContent = body.hidden ? "Mostra" : "Nascondi";
-      return;
-    }
-
-    action.disabled = true;
-    action.textContent = "Genero...";
-    body.hidden = false;
-    body.innerHTML = '<p class="ai-status">Sto preparando una spiegazione mirata per Vero e Falso.</p>';
-
-    try {
-      const response = await fetchJson("./api/explanation", {
-        method: "POST",
-        body: JSON.stringify({ questionId: question.id }),
-      });
-      explanationCache.set(question.id, response.explanation);
-      renderAiExplanationBody(body, question, answer, response.explanation);
-      action.textContent = response.source === "cache" ? "Da cache" : "Generata";
-    } catch (error) {
-      body.innerHTML = "";
-      const message = document.createElement("p");
-      message.className = "ai-status ai-status-error";
-      message.textContent =
-        error.message || "Non riesco a caricare la spiegazione in questo momento.";
-      body.append(message);
-      action.textContent = "Riprova";
-    } finally {
-      action.disabled = false;
-    }
-  });
+  if (cached) {
+    renderAiExplanationBody(body, question, answer, cached);
+  } else {
+    renderExplanationSkeleton(body);
+    observeExplanationPanel(panel, question, answer);
+  }
 
   return panel;
 }
@@ -431,27 +407,25 @@ function createAiExplanationPanel(question, answer) {
 function renderAiExplanationBody(body, question, answer, explanation) {
   body.innerHTML = "";
 
+  const correctExplanation = question.correct
+    ? explanation.trueExplanation
+    : explanation.falseExplanation;
+
   const intro = document.createElement("p");
   intro.className = "ai-key-point";
-  intro.textContent = explanation.keyPoint;
-
-  const options = document.createElement("div");
-  options.className = "ai-option-grid";
-  options.append(
-    createAiOption("Vero", true, question.correct, answer, explanation.trueExplanation),
-    createAiOption("Falso", false, question.correct, answer, explanation.falseExplanation),
-  );
+  intro.textContent = `Risposta corretta: ${labelAnswer(question.correct)}. ${explanation.keyPoint}`;
 
   const footer = document.createElement("div");
   footer.className = "ai-explanation-footer";
 
-  const meta = document.createElement("span");
-  meta.textContent = `Modello ${explanation.model || "AI"} · confidenza ${explanation.confidence || "media"}`;
+  const explanationText = document.createElement("p");
+  explanationText.className = "single-explanation";
+  explanationText.textContent = correctExplanation;
 
   const reportButton = document.createElement("button");
   reportButton.className = "report-button";
   reportButton.type = "button";
-  reportButton.textContent = "Segnala";
+  reportButton.textContent = "Segnala spiegazione";
 
   const reportForm = createReportForm(question.id, explanation);
   reportForm.hidden = true;
@@ -460,37 +434,64 @@ function renderAiExplanationBody(body, question, answer, explanation) {
     reportForm.hidden = !reportForm.hidden;
   });
 
-  footer.append(meta, reportButton);
-  body.append(intro, options, footer, reportForm);
+  footer.append(reportButton);
+  body.append(intro, explanationText, footer, reportForm);
 }
 
-function createAiOption(label, value, correctAnswer, selectedAnswer, text) {
-  const option = document.createElement("article");
-  option.className = "ai-option";
-  option.classList.toggle("ai-option-correct", value === correctAnswer);
-  option.classList.toggle("ai-option-selected", selectedAnswer === value);
-
-  const badge = document.createElement("span");
-  badge.className = "ai-option-badge";
-  badge.textContent = label;
-
-  const tags = document.createElement("div");
-  tags.className = "ai-option-tags";
-  if (value === correctAnswer) tags.append(createMiniTag("Corretta"));
-  if (selectedAnswer === value) tags.append(createMiniTag("Scelta"));
-
-  const paragraph = document.createElement("p");
-  paragraph.textContent = text;
-
-  option.append(badge, tags, paragraph);
-  return option;
+function renderExplanationSkeleton(body) {
+  body.innerHTML = `
+    <div class="explanation-skeleton" aria-label="Caricamento spiegazione">
+      <span></span>
+      <span></span>
+      <span></span>
+    </div>
+  `;
 }
 
-function createMiniTag(text) {
-  const tag = document.createElement("span");
-  tag.className = "mini-tag";
-  tag.textContent = text;
-  return tag;
+function observeExplanationPanel(panel, question, answer) {
+  explanationTargets.set(panel, { question, answer });
+  if (!("IntersectionObserver" in window)) {
+    window.setTimeout(() => loadExplanationPanel(panel), 0);
+    return;
+  }
+  if (!explanationObserver) {
+    explanationObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          explanationObserver.unobserve(entry.target);
+          loadExplanationPanel(entry.target);
+        });
+      },
+      { rootMargin: "180px 0px" },
+    );
+  }
+  explanationObserver.observe(panel);
+}
+
+async function loadExplanationPanel(panel) {
+  const target = explanationTargets.get(panel);
+  if (!target || pendingExplanationLoads.has(target.question.id)) return;
+  const body = panel.querySelector(".ai-explanation-body");
+  pendingExplanationLoads.add(target.question.id);
+
+  try {
+    const response = await fetchJson("./api/explanation", {
+      method: "POST",
+      body: JSON.stringify({ questionId: target.question.id }),
+    });
+    explanationCache.set(target.question.id, response.explanation);
+    renderAiExplanationBody(body, target.question, target.answer, response.explanation);
+  } catch (error) {
+    body.innerHTML = "";
+    const message = document.createElement("p");
+    message.className = "ai-status ai-status-error";
+    message.textContent =
+      error.message || "Spiegazione non disponibile in questo momento.";
+    body.append(message);
+  } finally {
+    pendingExplanationLoads.delete(target.question.id);
+  }
 }
 
 function createReportForm(questionId, explanation) {
