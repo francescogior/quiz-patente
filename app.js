@@ -3,11 +3,24 @@ const bank = window.PATENTE_QUESTION_BANK;
 const STORAGE_KEY = "quiz-patente-session-v1";
 const HISTORY_KEY = "quiz-patente-history-v1";
 const AUTH_TOKEN_KEY = "quiz-patente-auth-token-v1";
+const LANGUAGE_PREF_KEY = "quiz-patente-translation-language-v1";
 const settings = bank?.settings ?? { examQuestions: 30, examMinutes: 20, maxErrors: 3 };
 const allQuestions = bank?.questions ?? [];
 const explanationCache = new Map();
 const explanationTargets = new WeakMap();
 const pendingExplanationLoads = new Set();
+const translationCache = new Map();
+const pendingTranslations = new Map();
+const ORIGINAL_LANGUAGE = { code: "it", label: "Italiano originale", custom: false };
+const PRESET_LANGUAGES = [
+  ORIGINAL_LANGUAGE,
+  { code: "en", label: "Inglese", custom: false },
+  { code: "ru", label: "Russo", custom: false },
+  { code: "hy", label: "Armeno", custom: false },
+  { code: "fa", label: "Persiano", custom: false },
+  { code: "zh-Hans", label: "Cinese semplificato", custom: false },
+  { code: "tr", label: "Turco", custom: false },
+];
 
 const els = {
   questionCounter: document.getElementById("questionCounter"),
@@ -19,8 +32,13 @@ const els = {
   examControls: document.getElementById("examControls"),
   questionMedia: document.getElementById("questionMedia"),
   questionImage: document.getElementById("questionImage"),
+  questionLanguageControl: document.getElementById("questionLanguageControl"),
+  questionLanguageSelect: document.getElementById("questionLanguageSelect"),
   questionTopic: document.getElementById("questionTopic"),
   questionText: document.getElementById("questionText"),
+  questionTranslation: document.getElementById("questionTranslation"),
+  questionTranslationLabel: document.getElementById("questionTranslationLabel"),
+  translatedQuestionText: document.getElementById("translatedQuestionText"),
   answerButtons: [...document.querySelectorAll(".answer-button")],
   prevButton: document.getElementById("prevButton"),
   nextButton: document.getElementById("nextButton"),
@@ -59,6 +77,10 @@ const els = {
   progressTotal: document.getElementById("progressTotal"),
   progressPassed: document.getElementById("progressPassed"),
   progressAverage: document.getElementById("progressAverage"),
+  accountLanguageSelect: document.getElementById("accountLanguageSelect"),
+  customLanguageField: document.getElementById("customLanguageField"),
+  customLanguageInput: document.getElementById("customLanguageInput"),
+  translationPreferenceStatus: document.getElementById("translationPreferenceStatus"),
   progressList: document.getElementById("progressList"),
   adminPanel: document.getElementById("adminPanel"),
   refreshAdminButton: document.getElementById("refreshAdminButton"),
@@ -73,11 +95,13 @@ const els = {
 let state = restoreSession() ?? createExam();
 let authState = { token: localStorage.getItem(AUTH_TOKEN_KEY), user: null, progress: null };
 let adminState = { data: null, view: "users", loading: false, error: "" };
+let translationState = { language: restoreLanguagePreference() };
 let timerId = 0;
 let deferredInstallPrompt = null;
 let drawerClosingTimer = 0;
 let accountClosingTimer = 0;
 let explanationObserver = null;
+let customLanguageTimer = 0;
 
 init();
 
@@ -105,6 +129,9 @@ function init() {
     els.loginCode.value = els.loginCode.value.replace(/\D/g, "").slice(0, 6);
   });
   els.signOutButton.addEventListener("click", signOut);
+  els.questionLanguageSelect.addEventListener("change", handleQuestionLanguageChange);
+  els.accountLanguageSelect.addEventListener("change", handleAccountLanguageChange);
+  els.customLanguageInput.addEventListener("input", handleCustomLanguageInput);
   els.refreshAdminButton.addEventListener("click", () => loadAdminDashboard(true));
   els.adminTabs.addEventListener("click", (event) => {
     const tab = event.target.closest("[data-admin-view]");
@@ -191,6 +218,231 @@ function persistSession() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
+function restoreLanguagePreference() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(LANGUAGE_PREF_KEY) || "null");
+    if (!saved || typeof saved !== "object") return ORIGINAL_LANGUAGE;
+    if (saved.custom && saved.label) {
+      return {
+        code: "custom",
+        label: String(saved.label).trim().slice(0, 80),
+        custom: true,
+      };
+    }
+    return PRESET_LANGUAGES.find((language) => language.code === saved.code) || ORIGINAL_LANGUAGE;
+  } catch {
+    return ORIGINAL_LANGUAGE;
+  }
+}
+
+function persistLanguagePreference() {
+  localStorage.setItem(LANGUAGE_PREF_KEY, JSON.stringify(translationState.language));
+}
+
+function getActiveTranslationLanguage() {
+  const language = translationState.language;
+  if (!authState.user || !language || language.code === "it") return null;
+  if (language.custom && !language.label.trim()) return null;
+  return language;
+}
+
+function isCustomLanguageSelected() {
+  return translationState.language?.custom || translationState.language?.code === "custom";
+}
+
+function setTranslationLanguage(language, shouldRender = true) {
+  translationState.language = language || ORIGINAL_LANGUAGE;
+  persistLanguagePreference();
+  renderLanguageControls();
+  if (!shouldRender) return;
+
+  if (state.finished) {
+    renderReviewList();
+  } else {
+    render();
+  }
+}
+
+function handleQuestionLanguageChange(event) {
+  const selected = languageFromSelectValue(event.target.value);
+  if (selected?.code === "custom" && !selected.label.trim()) {
+    openAccountPanel();
+    els.accountLanguageSelect.value = "custom";
+    els.customLanguageField.hidden = false;
+    window.setTimeout(() => els.customLanguageInput.focus(), 280);
+    renderLanguageControls();
+    return;
+  }
+  setTranslationLanguage(selected);
+}
+
+function handleAccountLanguageChange(event) {
+  const selected = languageFromSelectValue(event.target.value);
+  if (selected?.code === "custom") {
+    const label = els.customLanguageInput.value.trim();
+    setTranslationLanguage({ code: "custom", label, custom: true }, false);
+    els.customLanguageField.hidden = false;
+    els.translationPreferenceStatus.textContent = label
+      ? `Usero ${label} come lingua di traduzione.`
+      : "Scrivi il nome della lingua personalizzata.";
+    if (!label) els.customLanguageInput.focus();
+    if (label) setTranslationLanguage({ code: "custom", label, custom: true });
+    return;
+  }
+  setTranslationLanguage(selected);
+}
+
+function handleCustomLanguageInput() {
+  window.clearTimeout(customLanguageTimer);
+  customLanguageTimer = window.setTimeout(() => {
+    if (!isCustomLanguageSelected()) return;
+    const label = els.customLanguageInput.value.trim().slice(0, 80);
+    setTranslationLanguage({ code: "custom", label, custom: true });
+  }, 360);
+}
+
+function languageFromSelectValue(value) {
+  if (value === "custom") {
+    return {
+      code: "custom",
+      label: translationState.language?.custom ? translationState.language.label : "",
+      custom: true,
+    };
+  }
+  return PRESET_LANGUAGES.find((language) => language.code === value) || ORIGINAL_LANGUAGE;
+}
+
+function renderLanguageControls() {
+  const isSignedIn = Boolean(authState.user);
+  els.questionLanguageControl.hidden = !isSignedIn;
+  populateLanguageSelect(els.questionLanguageSelect, { includeCustomPlaceholder: false });
+  populateLanguageSelect(els.accountLanguageSelect, { includeCustomPlaceholder: true });
+
+  const selectValue = isCustomLanguageSelected() ? "custom" : translationState.language.code;
+  els.questionLanguageSelect.value = selectValue;
+  els.accountLanguageSelect.value = selectValue;
+  els.customLanguageField.hidden = !isCustomLanguageSelected();
+  els.customLanguageInput.value = isCustomLanguageSelected() ? translationState.language.label : "";
+
+  if (!isSignedIn) {
+    els.questionTranslation.hidden = true;
+    return;
+  }
+
+  const activeLanguage = getActiveTranslationLanguage();
+  if (!activeLanguage && isCustomLanguageSelected()) {
+    els.translationPreferenceStatus.textContent = "Scrivi il nome della lingua personalizzata.";
+  } else if (activeLanguage) {
+    els.translationPreferenceStatus.textContent = `Le domande e le spiegazioni saranno tradotte in ${activeLanguage.label}.`;
+  } else {
+    els.translationPreferenceStatus.textContent = "Mostro il testo ministeriale originale in italiano.";
+  }
+}
+
+function populateLanguageSelect(select, { includeCustomPlaceholder }) {
+  const currentValue = select.value;
+  select.innerHTML = "";
+  PRESET_LANGUAGES.forEach((language) => {
+    const option = document.createElement("option");
+    option.value = language.code;
+    option.textContent = language.label;
+    select.append(option);
+  });
+
+  if (includeCustomPlaceholder || translationState.language?.custom) {
+    const option = document.createElement("option");
+    option.value = "custom";
+    option.textContent = translationState.language?.custom && translationState.language.label
+      ? `Personalizzata: ${translationState.language.label}`
+      : "Lingua personalizzata...";
+    select.append(option);
+  }
+
+  select.value = currentValue;
+}
+
+function renderQuestionTranslation(question) {
+  const language = getActiveTranslationLanguage();
+  if (!language) {
+    els.questionTranslation.hidden = true;
+    els.translatedQuestionText.textContent = "";
+    return;
+  }
+
+  const cacheKey = translationKey(question, "");
+  const cached = translationCache.get(cacheKey);
+  els.questionTranslation.hidden = false;
+  els.questionTranslationLabel.textContent = `Traduzione in ${language.label}`;
+
+  if (cached) {
+    els.translatedQuestionText.textContent = cached.questionText;
+    return;
+  }
+
+  els.translatedQuestionText.textContent = "Traduco...";
+  loadTranslation(question, "").then((translation) => {
+    if (state.finished || state.questions[state.currentIndex]?.id !== question.id) return;
+    els.translatedQuestionText.textContent = translation.questionText;
+  }).catch((error) => {
+    if (state.finished || state.questions[state.currentIndex]?.id !== question.id) return;
+    els.translatedQuestionText.textContent =
+      error.message || "Traduzione non disponibile in questo momento.";
+  });
+}
+
+async function loadTranslation(question, explanation) {
+  const language = getActiveTranslationLanguage();
+  if (!language) {
+    return {
+      questionText: question.text,
+      topic: question.topic,
+      explanation,
+      language: ORIGINAL_LANGUAGE,
+    };
+  }
+
+  const cacheKey = translationKey(question, explanation);
+  if (translationCache.has(cacheKey)) return translationCache.get(cacheKey);
+  if (pendingTranslations.has(cacheKey)) return pendingTranslations.get(cacheKey);
+
+  const promise = authFetch("./api/translation", {
+    method: "POST",
+    body: JSON.stringify({
+      questionId: question.id,
+      language,
+      explanation,
+    }),
+  }).then((response) => {
+    translationCache.set(cacheKey, response.translation);
+    return response.translation;
+  }).finally(() => {
+    pendingTranslations.delete(cacheKey);
+  });
+
+  pendingTranslations.set(cacheKey, promise);
+  return promise;
+}
+
+function translationKey(question, explanation) {
+  const language = translationState.language || ORIGINAL_LANGUAGE;
+  return JSON.stringify([
+    question.id,
+    language.code,
+    language.label,
+    Boolean(explanation),
+    hashString(explanation || question.text),
+  ]);
+}
+
+function hashString(value) {
+  let hash = 0;
+  const text = String(value);
+  for (let index = 0; index < text.length; index += 1) {
+    hash = (hash * 31 + text.charCodeAt(index)) >>> 0;
+  }
+  return hash.toString(16);
+}
+
 function sample(items, count) {
   const pool = [...items];
   for (let index = pool.length - 1; index > 0; index -= 1) {
@@ -222,6 +474,8 @@ function render() {
   els.progressBar.style.width = progress;
   els.questionTopic.textContent = question.topic;
   els.questionText.textContent = question.text;
+  renderLanguageControls();
+  renderQuestionTranslation(question);
 
   if (question.image) {
     els.questionMedia.hidden = false;
@@ -434,9 +688,15 @@ function renderReviewList() {
     text.className = "review-question-text";
     text.textContent = question.text;
 
+    const textGroup = document.createElement("div");
+    textGroup.className = "review-question-copy";
+    textGroup.append(text);
+    const translatedQuestion = createTranslatedQuestionPanel(question);
+    if (translatedQuestion) textGroup.append(translatedQuestion);
+
     const explanation = createAiExplanationPanel(question, answer);
 
-    item.append(text, explanation);
+    item.append(textGroup, explanation);
     els.reviewList.append(item);
   });
 }
@@ -499,6 +759,8 @@ function renderAiExplanationBody(body, question, answer, explanation) {
   explanationText.className = "single-explanation";
   explanationText.textContent = cleanExplanationText(correctExplanation);
 
+  const translatedExplanation = createTranslatedExplanationPanel(question, correctExplanation);
+
   const reportButton = document.createElement("button");
   reportButton.className = "report-button";
   reportButton.type = "button";
@@ -512,7 +774,57 @@ function renderAiExplanationBody(body, question, answer, explanation) {
   });
 
   footer.append(reportButton);
-  body.append(explanationText, footer, reportForm);
+  body.append(explanationText);
+  if (translatedExplanation) body.append(translatedExplanation);
+  body.append(footer, reportForm);
+}
+
+function createTranslatedExplanationPanel(question, explanation) {
+  const language = getActiveTranslationLanguage();
+  if (!language) return null;
+
+  const panel = document.createElement("section");
+  panel.className = "translated-explanation";
+
+  const label = document.createElement("span");
+  label.textContent = `Traduzione in ${language.label}`;
+
+  const text = document.createElement("p");
+  text.textContent = "Traduco...";
+
+  panel.append(label, text);
+
+  loadTranslation(question, cleanExplanationText(explanation)).then((translation) => {
+    text.textContent = translation.explanation || translation.questionText;
+  }).catch((error) => {
+    text.textContent = error.message || "Traduzione non disponibile in questo momento.";
+  });
+
+  return panel;
+}
+
+function createTranslatedQuestionPanel(question) {
+  const language = getActiveTranslationLanguage();
+  if (!language) return null;
+
+  const panel = document.createElement("section");
+  panel.className = "translated-explanation translated-question-review";
+
+  const label = document.createElement("span");
+  label.textContent = `Domanda in ${language.label}`;
+
+  const text = document.createElement("p");
+  text.textContent = "Traduco...";
+
+  panel.append(label, text);
+
+  loadTranslation(question, "").then((translation) => {
+    text.textContent = translation.questionText;
+  }).catch((error) => {
+    text.textContent = error.message || "Traduzione non disponibile in questo momento.";
+  });
+
+  return panel;
 }
 
 function cleanExplanationText(text) {
@@ -758,6 +1070,7 @@ function renderAuth() {
   els.accountButton.textContent = isSignedIn ? "Progressi" : "Accedi";
   els.authSignedOut.hidden = isSignedIn;
   els.authSignedIn.hidden = !isSignedIn;
+  renderLanguageControls();
 
   if (!isSignedIn) {
     renderProgress(null);
@@ -770,6 +1083,11 @@ function renderAuth() {
   renderAdmin();
   if (authState.user.isAdmin && !adminState.data && !adminState.loading && !adminState.error) {
     loadAdminDashboard();
+  }
+  if (state.finished) {
+    renderReviewList();
+  } else {
+    renderQuestionTranslation(state.questions[state.currentIndex]);
   }
 }
 

@@ -63,9 +63,18 @@
           <div class="question-media" id="questionMedia" hidden>
             <img id="questionImage" alt="" />
           </div>
-          <p class="topic" id="questionTopic">Quiz ministeriali</p>
+          <div class="question-meta-row">
+            <p class="topic" id="questionTopic">Quiz ministeriali</p>
+            <label class="question-language" id="questionLanguageControl" hidden>
+              <span>Lingua</span>
+              <select id="questionLanguageSelect" aria-label="Lingua traduzione"></select>
+            </label>
+          </div>
           <h2 id="questionText">Caricamento domanda...</h2>
-
+          <div class="question-translation" id="questionTranslation" hidden>
+            <span id="questionTranslationLabel">Traduzione</span>
+            <p id="translatedQuestionText"></p>
+          </div>
         </section>
 
         <nav class="question-dots desktop-dots" id="questionDots" aria-label="Domande della scheda"></nav>
@@ -198,6 +207,26 @@
             <strong id="progressAverage">0</strong>
           </div>
         </div>
+        <section class="language-card">
+          <div>
+            <span class="status-label">Traduzioni</span>
+            <h3>Lingua predefinita</h3>
+          </div>
+          <label>
+            <span>Lingua</span>
+            <select id="accountLanguageSelect"></select>
+          </label>
+          <label class="custom-language-field" id="customLanguageField" hidden>
+            <span>Lingua personalizzata</span>
+            <input
+              id="customLanguageInput"
+              type="text"
+              maxlength="80"
+              placeholder="es. Ucraino, Spagnolo latinoamericano..."
+            />
+          </label>
+          <p id="translationPreferenceStatus"></p>
+        </section>
         <div class="progress-list" id="progressList"></div>
         <section class="admin-card" id="adminPanel" hidden>
           <div class="admin-head">

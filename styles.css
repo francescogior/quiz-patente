@@ -264,9 +264,10 @@ button:disabled {
   display: grid;
   grid-template-areas:
     "topic"
-    "question";
-  grid-template-rows: auto minmax(260px, 1fr);
-  gap: 18px;
+    "question"
+    "translation";
+  grid-template-rows: auto minmax(210px, 1fr) auto;
+  gap: 14px;
   align-items: start;
 }
 
@@ -285,10 +286,11 @@ button:disabled {
   display: grid;
   grid-template-areas:
     "media topic"
-    "media question";
+    "media question"
+    "media translation";
   grid-template-columns: minmax(210px, 0.62fr) minmax(0, 1.38fr);
-  grid-template-rows: auto minmax(180px, 1fr);
-  gap: 16px 24px;
+  grid-template-rows: auto minmax(130px, 1fr) auto;
+  gap: 14px 24px;
   align-items: start;
 }
 
@@ -329,7 +331,6 @@ button:disabled {
 }
 
 .topic {
-  grid-area: topic;
   width: fit-content;
   max-width: 100%;
   padding: 8px 12px;
@@ -339,6 +340,42 @@ button:disabled {
   color: #126d88;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.question-meta-row {
+  display: flex;
+  grid-area: topic;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.question-language {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  max-width: 100%;
+  min-height: 35px;
+  padding: 4px 6px 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.question-language select {
+  max-width: min(46vw, 190px);
+  min-height: 27px;
+  border: 0;
+  background: transparent;
+  color: var(--forest);
+  font: inherit;
+  font-size: 0.78rem;
+  text-transform: none;
 }
 
 #questionText {
@@ -351,6 +388,38 @@ button:disabled {
   color: #10201f;
   font-size: clamp(1.12rem, 1.9vw, 1.65rem);
   line-height: 1.22;
+}
+
+.question-translation {
+  display: grid;
+  grid-area: translation;
+  gap: 6px;
+  min-width: 0;
+  max-height: 120px;
+  padding: 10px 12px;
+  overflow: auto;
+  border: 1px solid rgba(26, 135, 165, 0.18);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(26, 135, 165, 0.08), rgba(244, 200, 75, 0.08));
+}
+
+.question-translation span,
+.translated-explanation span {
+  color: #126d88;
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.question-translation p,
+.translated-explanation p {
+  min-width: 0;
+  margin: 0;
+  color: #384846;
+  font-size: 0.96rem;
+  font-weight: 720;
+  line-height: 1.36;
+  overflow-wrap: anywhere;
 }
 
 .exam-controls {
@@ -798,6 +867,58 @@ body.account-open .account-panel {
   align-self: center;
 }
 
+.language-card {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(26, 135, 165, 0.18);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(26, 135, 165, 0.07), rgba(244, 200, 75, 0.08)),
+    #fffefa;
+}
+
+.language-card h3 {
+  margin: 3px 0 0;
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.language-card label,
+.custom-language-field {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.language-card select,
+.language-card input {
+  width: 100%;
+  min-height: 42px;
+  min-width: 0;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: white;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.95rem;
+  text-transform: none;
+}
+
+#translationPreferenceStatus {
+  min-height: 18px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 740;
+  line-height: 1.34;
+}
+
 .admin-card {
   display: grid;
   gap: 12px;
@@ -1129,9 +1250,15 @@ body.account-open .account-panel {
 }
 
 .review-question-text {
-  grid-area: question;
   font-size: clamp(1.04rem, 1.7vw, 1.24rem);
   font-weight: 760;
+}
+
+.review-question-copy {
+  display: grid;
+  grid-area: question;
+  gap: 10px;
+  min-width: 0;
 }
 
 .answer-comparison {
@@ -1285,6 +1412,16 @@ body.account-open .account-panel {
   color: var(--red);
 }
 
+.translated-explanation {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(26, 135, 165, 0.16);
+  border-radius: 14px;
+  background: rgba(232, 243, 247, 0.72);
+}
+
 .explanation-skeleton {
   display: grid;
   gap: 8px;
@@ -1381,8 +1518,9 @@ body.account-open .account-panel {
   .question-panel.no-media {
     grid-template-areas:
       "topic"
-      "question";
-    grid-template-rows: auto minmax(210px, 1fr);
+      "question"
+      "translation";
+    grid-template-rows: auto minmax(180px, 1fr) auto;
   }
 
   .question-panel.has-media {
@@ -1401,6 +1539,11 @@ body.account-open .account-panel {
 
   .question-panel.has-media #questionText {
     flex: 1 1 auto;
+  }
+
+  .question-panel.has-media .question-translation {
+    flex: 0 0 auto;
+    width: 100%;
   }
 }
 
@@ -1504,7 +1647,7 @@ body.account-open .account-panel {
 
   .question-panel.no-media {
     gap: 18px;
-    grid-template-rows: auto minmax(180px, 1fr);
+    grid-template-rows: auto minmax(150px, 1fr) auto;
   }
 
   .question-panel.has-media {
@@ -1557,6 +1700,20 @@ body.account-open .account-panel {
     font-size: clamp(1.05rem, 4.15vw, 1.36rem);
     line-height: 1.24;
     min-height: 0;
+  }
+
+  .question-language {
+    width: 100%;
+    justify-content: space-between;
+    border-radius: 14px;
+  }
+
+  .question-language select {
+    max-width: 62vw;
+  }
+
+  .question-translation {
+    max-height: 110px;
   }
 
   .exam-controls {
