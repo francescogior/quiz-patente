@@ -60,10 +60,19 @@ const els = {
   progressPassed: document.getElementById("progressPassed"),
   progressAverage: document.getElementById("progressAverage"),
   progressList: document.getElementById("progressList"),
+  adminPanel: document.getElementById("adminPanel"),
+  refreshAdminButton: document.getElementById("refreshAdminButton"),
+  adminUsersTotal: document.getElementById("adminUsersTotal"),
+  adminTestsTotal: document.getElementById("adminTestsTotal"),
+  adminPassedTotal: document.getElementById("adminPassedTotal"),
+  adminAvgErrors: document.getElementById("adminAvgErrors"),
+  adminTabs: document.getElementById("adminTabs"),
+  adminContent: document.getElementById("adminContent"),
 };
 
 let state = restoreSession() ?? createExam();
 let authState = { token: localStorage.getItem(AUTH_TOKEN_KEY), user: null, progress: null };
+let adminState = { data: null, view: "users", loading: false, error: "" };
 let timerId = 0;
 let deferredInstallPrompt = null;
 let drawerClosingTimer = 0;
@@ -96,6 +105,13 @@ function init() {
     els.loginCode.value = els.loginCode.value.replace(/\D/g, "").slice(0, 6);
   });
   els.signOutButton.addEventListener("click", signOut);
+  els.refreshAdminButton.addEventListener("click", () => loadAdminDashboard(true));
+  els.adminTabs.addEventListener("click", (event) => {
+    const tab = event.target.closest("[data-admin-view]");
+    if (!tab) return;
+    adminState.view = tab.dataset.adminView;
+    renderAdmin();
+  });
   window.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       closeQuestionDrawer();
@@ -636,6 +652,7 @@ async function initAuth() {
   } catch {
     localStorage.removeItem(AUTH_TOKEN_KEY);
     authState = { token: null, user: null, progress: null };
+    adminState = { data: null, view: "users", loading: false, error: "" };
     renderAuth();
   }
 }
@@ -647,7 +664,10 @@ function openAccountPanel() {
   requestAnimationFrame(() => {
     document.body.classList.add("account-open");
   });
-  if (authState.user) loadProgress();
+  if (authState.user) {
+    loadProgress();
+    if (authState.user.isAdmin) loadAdminDashboard();
+  }
 }
 
 function closeAccountPanel() {
@@ -702,6 +722,7 @@ async function verifyLoginCode(event) {
     authState.token = response.token;
     authState.user = response.user;
     authState.progress = response.progress;
+    adminState = { data: null, view: "users", loading: false, error: "" };
     localStorage.setItem(AUTH_TOKEN_KEY, response.token);
     els.loginCode.value = "";
     setAuthStatus("");
@@ -717,6 +738,7 @@ async function verifyLoginCode(event) {
 async function signOut() {
   const token = authState.token;
   authState = { token: null, user: null, progress: null };
+  adminState = { data: null, view: "users", loading: false, error: "" };
   localStorage.removeItem(AUTH_TOKEN_KEY);
   renderAuth();
   if (!token) return;
@@ -739,11 +761,16 @@ function renderAuth() {
 
   if (!isSignedIn) {
     renderProgress(null);
+    renderAdmin();
     return;
   }
 
   els.accountEmail.textContent = authState.user.email;
   renderProgress(authState.progress);
+  renderAdmin();
+  if (authState.user.isAdmin && !adminState.data && !adminState.loading && !adminState.error) {
+    loadAdminDashboard();
+  }
 }
 
 function setAuthStatus(message) {
@@ -803,6 +830,238 @@ function renderProgress(progress, errorMessage = "") {
     item.append(title, detail, pill);
     els.progressList.append(item);
   });
+}
+
+async function loadAdminDashboard(force = false) {
+  if (!authState.token || !authState.user?.isAdmin) return;
+  if (adminState.loading || (adminState.data && !force)) {
+    renderAdmin();
+    return;
+  }
+
+  adminState.loading = true;
+  adminState.error = "";
+  renderAdmin();
+
+  try {
+    const response = await authFetch("./api/admin-dashboard");
+    adminState.data = response.admin;
+  } catch (error) {
+    adminState.error = error.message || "Dashboard admin non disponibile.";
+  } finally {
+    adminState.loading = false;
+    renderAdmin();
+  }
+}
+
+function renderAdmin() {
+  const isAdmin = Boolean(authState.user?.isAdmin);
+  els.adminPanel.hidden = !isAdmin;
+  if (!isAdmin) {
+    els.adminContent.innerHTML = "";
+    return;
+  }
+
+  const summary = adminState.data?.summary ?? {
+    users: 0,
+    tests: 0,
+    passedTests: 0,
+    averageErrors: 0,
+  };
+  els.adminUsersTotal.textContent = String(summary.users || 0);
+  els.adminTestsTotal.textContent = String(summary.tests || 0);
+  els.adminPassedTotal.textContent = String(summary.passedTests || 0);
+  els.adminAvgErrors.textContent = formatAverage(summary.averageErrors || 0);
+  els.refreshAdminButton.disabled = adminState.loading;
+
+  els.adminTabs.querySelectorAll("[data-admin-view]").forEach((tab) => {
+    tab.classList.toggle("active", tab.dataset.adminView === adminState.view);
+  });
+
+  if (adminState.loading && !adminState.data) {
+    renderAdminMessage("Carico dashboard...");
+    return;
+  }
+
+  if (adminState.error) {
+    renderAdminMessage(adminState.error);
+    return;
+  }
+
+  if (!adminState.data) {
+    renderAdminMessage("Dashboard non ancora caricata.");
+    return;
+  }
+
+  if (adminState.view === "activity") {
+    renderAdminActivity(adminState.data.activity);
+    return;
+  }
+
+  if (adminState.view === "tests") {
+    renderAdminTests(adminState.data.tests);
+    return;
+  }
+
+  renderAdminUsers(adminState.data.users);
+}
+
+function renderAdminMessage(message) {
+  els.adminContent.innerHTML = "";
+  const item = document.createElement("p");
+  item.className = "progress-empty";
+  item.textContent = message;
+  els.adminContent.append(item);
+}
+
+function renderAdminUsers(users = []) {
+  els.adminContent.innerHTML = "";
+  if (users.length === 0) {
+    renderAdminMessage("Nessun utente iscritto.");
+    return;
+  }
+
+  const list = document.createElement("div");
+  list.className = "admin-list";
+  users.forEach((user) => {
+    const item = document.createElement("article");
+    item.className = "admin-row";
+
+    const header = document.createElement("div");
+    header.className = "admin-row-header";
+
+    const title = document.createElement("strong");
+    title.textContent = user.email;
+
+    const date = document.createElement("span");
+    date.textContent = `Iscritto ${formatDate(user.createdAt)}`;
+
+    header.append(title, date);
+
+    const stats = document.createElement("div");
+    stats.className = "admin-mini-stats";
+    stats.append(
+      createAdminMetric("Test", user.totalTests),
+      createAdminMetric("Promossi", user.passedTests),
+      createAdminMetric("Media errori", formatAverage(user.averageErrors)),
+      createAdminMetric("Sessioni", user.activeSessions),
+    );
+
+    const detail = document.createElement("p");
+    detail.className = "admin-detail";
+    detail.textContent = [
+      user.lastLoginAt ? `Ultimo accesso ${formatDate(user.lastLoginAt)}` : "Nessun accesso completato",
+      user.lastTestAt ? `ultimo test ${formatDate(user.lastTestAt)}` : "nessun test",
+    ].join(" · ");
+
+    item.append(header, stats, detail);
+    list.append(item);
+  });
+  els.adminContent.append(list);
+}
+
+function renderAdminActivity(activity = []) {
+  els.adminContent.innerHTML = "";
+  if (activity.length === 0) {
+    renderAdminMessage("Nessuna attività recente.");
+    return;
+  }
+
+  const list = document.createElement("div");
+  list.className = "admin-list";
+  activity.forEach((event) => {
+    const item = document.createElement("article");
+    item.className = "admin-row admin-activity-row";
+
+    const badge = document.createElement("span");
+    badge.className = `admin-event admin-event-${event.type}`;
+    badge.textContent = event.label;
+
+    const title = document.createElement("strong");
+    title.textContent = event.email;
+
+    const detail = document.createElement("span");
+    detail.textContent = `${formatDate(event.at)} · ${event.detail}`;
+
+    item.append(badge, title, detail);
+    list.append(item);
+  });
+  els.adminContent.append(list);
+}
+
+function renderAdminTests(tests = []) {
+  els.adminContent.innerHTML = "";
+  if (tests.length === 0) {
+    renderAdminMessage("Nessun test salvato.");
+    return;
+  }
+
+  const list = document.createElement("div");
+  list.className = "admin-list";
+  tests.forEach((test) => {
+    const item = document.createElement("details");
+    item.className = "admin-row admin-test-row";
+
+    const summary = document.createElement("summary");
+    const left = document.createElement("span");
+    left.textContent = `${test.userEmail} · ${formatDate(test.finishedAt)}`;
+
+    const result = document.createElement("strong");
+    result.className = test.passed ? "admin-pass" : "admin-fail";
+    result.textContent = `${test.errorCount} ${test.errorCount === 1 ? "errore" : "errori"}`;
+
+    summary.append(left, result);
+
+    const stats = document.createElement("div");
+    stats.className = "admin-mini-stats";
+    stats.append(
+      createAdminMetric("Corrette", test.correctCount),
+      createAdminMetric("Tempo", formatDuration(test.usedMs)),
+      createAdminMetric("Motivo", test.finishReason === "timeout" ? "Tempo" : "Manuale"),
+    );
+
+    const wrongAnswers = (test.answers || []).filter((answer) => answer.isCorrect === false);
+    const answers = document.createElement("div");
+    answers.className = "admin-answer-list";
+
+    if (wrongAnswers.length === 0) {
+      const itemText = document.createElement("p");
+      itemText.textContent = "Nessun errore registrato in questo test.";
+      answers.append(itemText);
+    } else {
+      wrongAnswers.slice(0, 8).forEach((answer) => {
+        const itemText = document.createElement("p");
+        itemText.textContent = `#${answer.questionId} ${answer.topic || "Domanda"}: scelta ${formatAdminAnswer(
+          answer.answer,
+        )}, corretta ${formatAdminAnswer(answer.correctAnswer)}`;
+        answers.append(itemText);
+      });
+      if (wrongAnswers.length > 8) {
+        const extra = document.createElement("p");
+        extra.textContent = `+${wrongAnswers.length - 8} altri errori`;
+        answers.append(extra);
+      }
+    }
+
+    item.append(summary, stats, answers);
+    list.append(item);
+  });
+  els.adminContent.append(list);
+}
+
+function createAdminMetric(label, value) {
+  const item = document.createElement("span");
+  const labelNode = document.createElement("small");
+  labelNode.textContent = label;
+  const valueNode = document.createElement("strong");
+  valueNode.textContent = String(value);
+  item.append(labelNode, valueNode);
+  return item;
+}
+
+function formatAdminAnswer(value) {
+  if (value === null || value === undefined) return "Non data";
+  return labelAnswer(Boolean(value));
 }
 
 async function syncFinishedExam() {

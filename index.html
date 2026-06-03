@@ -199,6 +199,39 @@
           </div>
         </div>
         <div class="progress-list" id="progressList"></div>
+        <section class="admin-card" id="adminPanel" hidden>
+          <div class="admin-head">
+            <div>
+              <span class="status-label">Admin</span>
+              <h3>Dashboard</h3>
+            </div>
+            <button class="ghost-button" id="refreshAdminButton" type="button">Aggiorna</button>
+          </div>
+          <div class="admin-summary" aria-label="Metriche admin">
+            <div>
+              <span>Utenti</span>
+              <strong id="adminUsersTotal">0</strong>
+            </div>
+            <div>
+              <span>Test</span>
+              <strong id="adminTestsTotal">0</strong>
+            </div>
+            <div>
+              <span>Promossi</span>
+              <strong id="adminPassedTotal">0</strong>
+            </div>
+            <div>
+              <span>Media errori</span>
+              <strong id="adminAvgErrors">0</strong>
+            </div>
+          </div>
+          <div class="admin-tabs" id="adminTabs" role="tablist" aria-label="Sezioni admin">
+            <button class="admin-tab active" data-admin-view="users" type="button">Utenti</button>
+            <button class="admin-tab" data-admin-view="activity" type="button">Attività</button>
+            <button class="admin-tab" data-admin-view="tests" type="button">Test</button>
+          </div>
+          <div class="admin-content" id="adminContent" aria-live="polite"></div>
+        </section>
       </div>
     </aside>
   </body>

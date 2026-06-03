@@ -1,20 +1,19 @@
 const {
-  authenticateRequest,
-  getProgress,
+  authenticateAdminRequest,
+  getAdminDashboard,
   publicError,
   sendJson,
-  withAdminFlag,
 } = require("../lib/user-store");
 
 module.exports = async function handler(req, res) {
   if (req.method !== "GET") return sendJson(res, 405, { error: "Metodo non supportato." });
 
   try {
-    const { user } = await authenticateRequest(req);
-    const progress = await getProgress(user.id);
-    return sendJson(res, 200, { user: withAdminFlag(user), progress });
+    await authenticateAdminRequest(req);
+    const admin = await getAdminDashboard();
+    return sendJson(res, 200, { admin });
   } catch (error) {
-    const response = publicError(error, "Sessione non valida.");
+    const response = publicError(error, "Dashboard admin non disponibile.");
     return sendJson(res, response.statusCode, response.payload);
   }
 };

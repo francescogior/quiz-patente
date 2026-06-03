@@ -612,7 +612,7 @@ body.drawer-open .question-drawer {
   z-index: 70;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  width: min(430px, calc(100% - 36px));
+  width: min(560px, calc(100% - 36px));
   padding: 18px;
   overflow: auto;
   border: 1px solid rgba(255, 255, 255, 0.68);
@@ -796,6 +796,241 @@ body.account-open .account-panel {
 .progress-item .result-pill {
   grid-row: span 2;
   align-self: center;
+}
+
+.admin-card {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  margin-top: 6px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(19, 54, 52, 0.1);
+}
+
+.admin-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.admin-head h3 {
+  margin: 3px 0 0;
+  color: var(--ink);
+  font-size: 1.15rem;
+}
+
+.admin-head .ghost-button {
+  min-height: 38px;
+  border-color: var(--line);
+  background: white;
+  color: var(--forest);
+}
+
+.admin-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.admin-summary > div {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fbfaf6;
+}
+
+.admin-summary span,
+.admin-mini-stats small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.admin-summary strong {
+  display: block;
+  margin-top: 5px;
+  color: var(--ink);
+  font-size: 1.12rem;
+  line-height: 1;
+}
+
+.admin-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  padding: 4px;
+  border-radius: 16px;
+  background: #eef3ee;
+}
+
+.admin-tab {
+  min-height: 36px;
+  padding: 0 8px;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 900;
+}
+
+.admin-tab.active {
+  background: white;
+  color: var(--forest);
+  box-shadow: 0 8px 18px rgba(10, 28, 27, 0.08);
+}
+
+.admin-content,
+.admin-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.admin-row {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: white;
+}
+
+.admin-row-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+  min-width: 0;
+}
+
+.admin-row strong,
+.admin-activity-row > strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-row-header > span,
+.admin-activity-row > span:not(.admin-event),
+.admin-detail,
+.admin-answer-list p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 730;
+  line-height: 1.35;
+}
+
+.admin-mini-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.admin-mini-stats > span {
+  min-width: 0;
+  padding: 8px;
+  border-radius: 12px;
+  background: #f7faf6;
+}
+
+.admin-mini-stats strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.94rem;
+}
+
+.admin-activity-row {
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 10px;
+  align-items: center;
+}
+
+.admin-activity-row > span:not(.admin-event) {
+  grid-column: 2;
+}
+
+.admin-event {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: #e8f3f7;
+  color: #126d88;
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.admin-event-test {
+  background: #eaf7f0;
+  color: var(--green);
+}
+
+.admin-event-login_code {
+  background: #fff4d6;
+  color: #8b641c;
+}
+
+.admin-event-login {
+  background: var(--mint);
+  color: var(--forest);
+}
+
+.admin-test-row {
+  padding: 0;
+  overflow: hidden;
+}
+
+.admin-test-row summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.admin-test-row summary::-webkit-details-marker {
+  display: none;
+}
+
+.admin-test-row summary span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-test-row .admin-mini-stats,
+.admin-answer-list {
+  margin: 0 12px 12px;
+}
+
+.admin-pass {
+  color: var(--green);
+}
+
+.admin-fail {
+  color: var(--red);
+}
+
+.admin-answer-list {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 12px;
+  background: #f7faf6;
 }
 
 .result-hero {
@@ -1411,6 +1646,23 @@ body.account-open .account-panel {
 
   .progress-summary {
     grid-template-columns: 1fr;
+  }
+
+  .admin-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-mini-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-row-header,
+  .admin-test-row summary {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-row-header > span {
+    font-size: 0.78rem;
   }
 
   .account-head {

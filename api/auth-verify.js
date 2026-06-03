@@ -6,6 +6,7 @@ const {
   readJson,
   sendJson,
   verifyLoginCode,
+  withAdminFlag,
 } = require("../lib/user-store");
 
 module.exports = async function handler(req, res) {
@@ -22,7 +23,7 @@ module.exports = async function handler(req, res) {
     const { token, user } = await verifyLoginCode(email, code);
     const progress = await getProgress(user.id);
 
-    return sendJson(res, 200, { token, user, progress });
+    return sendJson(res, 200, { token, user: withAdminFlag(user), progress });
   } catch (error) {
     const response = publicError(error, "Codice non valido.");
     return sendJson(res, response.statusCode, response.payload);
