@@ -34,9 +34,9 @@ html {
 body {
   min-height: 100%;
   margin: 0;
-  padding-bottom: calc(148px + env(safe-area-inset-bottom));
+  padding-bottom: 0;
   background:
-    linear-gradient(180deg, #082f2e 0 230px, rgba(8, 47, 46, 0) 230px),
+    linear-gradient(180deg, #082f2e 0 190px, rgba(8, 47, 46, 0) 190px),
     linear-gradient(180deg, #eef3ee, #faf8f2 62%, #f7faf6);
   color: var(--ink);
   font-family:
@@ -94,7 +94,7 @@ button:disabled {
   align-items: flex-start;
   justify-content: space-between;
   gap: 18px;
-  min-height: 148px;
+  min-height: 108px;
   color: white;
 }
 
@@ -129,7 +129,7 @@ button:disabled {
   margin: 5px 0 0;
   max-width: 760px;
   color: #fffdf7;
-  font-size: clamp(2.35rem, 8vw, 5.25rem);
+  font-size: clamp(2.25rem, 5.9vw, 4.35rem);
   line-height: 0.96;
 }
 
@@ -177,8 +177,8 @@ button:disabled {
   position: sticky;
   top: 12px;
   z-index: 20;
-  margin: 10px 0 28px;
-  padding: 12px;
+  margin: 8px 0 18px;
+  padding: 10px;
   border: 1px solid rgba(255, 255, 255, 0.62);
   border-radius: 24px;
   background: rgba(255, 253, 250, 0.88);
@@ -189,14 +189,14 @@ button:disabled {
 .status-row {
   display: grid;
   grid-template-columns: 1.05fr 1.25fr 1.05fr 1fr auto;
-  gap: 10px;
-  margin-bottom: 10px;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
 .status-card,
 .result-grid > div {
   min-width: 0;
-  padding: 14px 16px;
+  padding: 11px 14px;
   border: 1px solid var(--line);
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.78);
@@ -205,9 +205,9 @@ button:disabled {
 .status-card strong,
 .result-grid strong {
   display: block;
-  margin-top: 5px;
+  margin-top: 4px;
   color: var(--ink);
-  font-size: clamp(1.22rem, 2.6vw, 1.75rem);
+  font-size: clamp(1.14rem, 2.1vw, 1.48rem);
   line-height: 1;
 }
 
@@ -229,7 +229,7 @@ button:disabled {
 }
 
 .progress-track {
-  height: 12px;
+  height: 10px;
   overflow: hidden;
   border-radius: 999px;
   background: #dbe6e1;
@@ -248,8 +248,8 @@ button:disabled {
 .results-panel {
   position: relative;
   overflow: hidden;
-  margin-top: 16px;
-  padding: clamp(18px, 3vw, 30px);
+  margin-top: 12px;
+  padding: clamp(16px, 2vw, 24px);
   border: 1px solid rgba(255, 255, 255, 0.72);
   border-radius: 30px;
   background: rgba(255, 253, 250, 0.94);
@@ -257,7 +257,7 @@ button:disabled {
 }
 
 .question-panel {
-  height: clamp(430px, 50vh, 560px);
+  height: clamp(350px, calc(100svh - 410px), 500px);
 }
 
 .question-panel.no-media {
@@ -286,9 +286,9 @@ button:disabled {
   grid-template-areas:
     "media topic"
     "media question";
-  grid-template-columns: minmax(240px, 0.78fr) minmax(0, 1.22fr);
-  grid-template-rows: auto minmax(210px, 1fr);
-  gap: 18px 28px;
+  grid-template-columns: minmax(210px, 0.62fr) minmax(0, 1.38fr);
+  grid-template-rows: auto minmax(180px, 1fr);
+  gap: 16px 24px;
   align-items: start;
 }
 
@@ -303,7 +303,7 @@ button:disabled {
   place-items: center;
   width: 100%;
   max-width: 100%;
-  height: clamp(260px, 24vw, 340px);
+  height: clamp(210px, 17vw, 285px);
   min-height: 0;
   overflow: hidden;
   aspect-ratio: 1.28;
@@ -320,8 +320,8 @@ button:disabled {
   display: block;
   width: 100%;
   height: 100%;
-  max-width: 320px;
-  max-height: 320px;
+  max-width: 260px;
+  max-height: 260px;
   object-fit: contain;
   object-position: center;
   padding: clamp(8px, 2vw, 18px);
@@ -355,13 +355,13 @@ button:disabled {
 
 .exam-controls {
   position: fixed;
-  bottom: max(14px, env(safe-area-inset-bottom));
+  bottom: max(12px, env(safe-area-inset-bottom));
   left: 50%;
   z-index: 38;
   display: grid;
-  gap: 8px;
-  width: min(560px, calc(100% - 32px));
-  padding: 10px;
+  gap: 7px;
+  width: min(520px, calc(100% - 32px));
+  padding: 8px;
   border: 1px solid rgba(255, 255, 255, 0.72);
   border-radius: 20px;
   background: rgba(255, 253, 250, 0.95);
@@ -381,11 +381,11 @@ button:disabled {
   position: relative;
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 12px;
-  min-height: 56px;
+  gap: 10px;
+  min-height: 48px;
   align-items: center;
   justify-items: start;
-  padding: 12px;
+  padding: 9px 10px;
   overflow: hidden;
   border: 2px solid var(--line);
   background: #fffefa;
@@ -414,8 +414,8 @@ button:disabled {
 .answer-key {
   display: grid;
   place-items: center;
-  width: 42px;
-  height: 42px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   background: var(--mint);
   color: var(--forest);
@@ -469,7 +469,7 @@ button:disabled {
 }
 
 .question-actions button {
-  min-height: 40px;
+  min-height: 36px;
   padding: 0 12px;
   border-radius: 14px;
   font-size: 0.9rem;
