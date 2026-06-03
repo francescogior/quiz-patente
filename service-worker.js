@@ -1,6 +1,6 @@
 importScripts("./data/asset-manifest-sw.js");
 
-const CACHE_NAME = "quiz-patente-ab-v18";
+const CACHE_NAME = "quiz-patente-ab-v19";
 const CORE_ASSETS = [
   "./",
   "./index.html",
@@ -37,6 +37,11 @@ self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;
   const url = new URL(request.url);
+
+  if (url.origin === self.location.origin && url.pathname.startsWith("/_vercel/insights/")) {
+    event.respondWith(fetch(request));
+    return;
+  }
 
   if (url.origin === self.location.origin && url.pathname.startsWith("/api/")) {
     event.respondWith(fetch(request));
