@@ -257,7 +257,7 @@ button:disabled {
 }
 
 .question-panel {
-  height: clamp(500px, 58vh, 660px);
+  height: clamp(430px, 50vh, 560px);
 }
 
 .question-panel.no-media {
@@ -266,6 +266,7 @@ button:disabled {
     "topic"
     "question";
   grid-template-rows: auto minmax(260px, 1fr);
+  gap: 18px;
   align-items: start;
 }
 
@@ -285,7 +286,7 @@ button:disabled {
   grid-template-areas:
     "media topic"
     "media question";
-  grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.1fr);
+  grid-template-columns: minmax(240px, 0.78fr) minmax(0, 1.22fr);
   grid-template-rows: auto minmax(210px, 1fr);
   gap: 18px 28px;
   align-items: start;
@@ -302,7 +303,7 @@ button:disabled {
   place-items: center;
   width: 100%;
   max-width: 100%;
-  height: clamp(340px, 34vw, 440px);
+  height: clamp(260px, 24vw, 340px);
   min-height: 0;
   overflow: hidden;
   aspect-ratio: 1.28;
@@ -319,8 +320,8 @@ button:disabled {
   display: block;
   width: 100%;
   height: 100%;
-  max-width: 420px;
-  max-height: 420px;
+  max-width: 320px;
+  max-height: 320px;
   object-fit: contain;
   object-position: center;
   padding: clamp(8px, 2vw, 18px);
@@ -1185,7 +1186,7 @@ body.account-open .account-panel {
   .topbar {
     min-height: 98px;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
   }
 
   .brand h1 {
@@ -1214,10 +1215,10 @@ body.account-open .account-panel {
   }
 
   .exam-status {
-    top: 0;
-    margin: 0 -4px 14px;
+    top: 8px;
+    margin: 10px -2px 18px;
     padding: 8px;
-    border-radius: 0 0 20px 20px;
+    border-radius: 22px;
   }
 
   .status-row {
@@ -1267,6 +1268,7 @@ body.account-open .account-panel {
   }
 
   .question-panel.no-media {
+    gap: 18px;
     grid-template-rows: auto minmax(180px, 1fr);
   }
 
