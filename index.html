@@ -21,7 +21,7 @@
         <div class="top-actions">
           <button class="ghost-button" id="installButton" type="button" hidden>Installa</button>
           <button class="ghost-button" id="accountButton" type="button">Accedi</button>
-          <button class="primary-button" id="newExamButton" type="button">Nuova scheda</button>
+          <button class="primary-button" id="newExamButton" type="button">Nuovo test</button>
         </div>
       </header>
 
@@ -66,22 +66,6 @@
           <p class="topic" id="questionTopic">Quiz ministeriali</p>
           <h2 id="questionText">Caricamento domanda...</h2>
 
-          <div class="answer-grid" aria-label="Risposte">
-            <button class="answer-button answer-true" data-answer="true" type="button">
-              <span class="answer-key">V</span>
-              <span class="answer-copy">Vero</span>
-            </button>
-            <button class="answer-button answer-false" data-answer="false" type="button">
-              <span class="answer-key">F</span>
-              <span class="answer-copy">Falso</span>
-            </button>
-          </div>
-
-          <div class="question-actions">
-            <button class="ghost-button" id="prevButton" type="button">Indietro</button>
-            <button class="ghost-button" id="nextButton" type="button">Avanti</button>
-            <button class="danger-button" id="finishButton" type="button">Concludi</button>
-          </div>
         </section>
 
         <nav class="question-dots desktop-dots" id="questionDots" aria-label="Domande della scheda"></nav>
@@ -110,30 +94,24 @@
         </section>
       </main>
 
-      <footer>
-        <span id="sourceInfo">Fonte ministeriale</span>
-        <span id="offlineStatus">PWA</span>
-      </footer>
-    </div>
+      <div class="exam-controls" id="examControls" aria-label="Comandi test">
+        <div class="answer-grid" aria-label="Risposte">
+          <button class="answer-button answer-true" data-answer="true" type="button">
+            <span class="answer-key">V</span>
+            <span class="answer-copy">Vero</span>
+          </button>
+          <button class="answer-button answer-false" data-answer="false" type="button">
+            <span class="answer-key">F</span>
+            <span class="answer-copy">Falso</span>
+          </button>
+        </div>
 
-    <div class="mobile-exam-dock" aria-label="Navigazione scheda">
-      <div class="mobile-dock-summary">
-        <span id="mobileQuestionCounter">1/30</span>
-        <strong id="mobileTimer">20:00</strong>
-        <span id="mobileAnsweredCounter">0/30</span>
+        <div class="question-actions">
+          <button class="ghost-button" id="prevButton" type="button">Indietro</button>
+          <button class="ghost-button" id="nextButton" type="button">Avanti</button>
+          <button class="danger-button" id="finishButton" type="button">Concludi</button>
+        </div>
       </div>
-      <div class="mobile-progress-track" aria-hidden="true">
-        <div id="mobileProgressBar"></div>
-      </div>
-      <button
-        class="primary-button mobile-drawer-toggle"
-        id="mobileQuestionDrawerButton"
-        type="button"
-        aria-controls="questionDrawer"
-        aria-expanded="false"
-      >
-        Domande
-      </button>
     </div>
 
     <div class="drawer-backdrop" id="drawerBackdrop" hidden></div>

@@ -11,15 +11,12 @@ const pendingExplanationLoads = new Set();
 
 const els = {
   questionCounter: document.getElementById("questionCounter"),
-  mobileQuestionCounter: document.getElementById("mobileQuestionCounter"),
   answeredCounter: document.getElementById("answeredCounter"),
-  mobileAnsweredCounter: document.getElementById("mobileAnsweredCounter"),
   threshold: document.getElementById("threshold"),
   timer: document.getElementById("timer"),
-  mobileTimer: document.getElementById("mobileTimer"),
   progressBar: document.getElementById("progressBar"),
-  mobileProgressBar: document.getElementById("mobileProgressBar"),
   questionPanel: document.getElementById("questionPanel"),
+  examControls: document.getElementById("examControls"),
   questionMedia: document.getElementById("questionMedia"),
   questionImage: document.getElementById("questionImage"),
   questionTopic: document.getElementById("questionTopic"),
@@ -32,7 +29,6 @@ const els = {
   installButton: document.getElementById("installButton"),
   accountButton: document.getElementById("accountButton"),
   questionDrawerButton: document.getElementById("questionDrawerButton"),
-  mobileQuestionDrawerButton: document.getElementById("mobileQuestionDrawerButton"),
   closeDrawerButton: document.getElementById("closeDrawerButton"),
   drawerBackdrop: document.getElementById("drawerBackdrop"),
   questionDrawer: document.getElementById("questionDrawer"),
@@ -46,8 +42,6 @@ const els = {
   errorCount: document.getElementById("errorCount"),
   usedTime: document.getElementById("usedTime"),
   reviewList: document.getElementById("reviewList"),
-  sourceInfo: document.getElementById("sourceInfo"),
-  offlineStatus: document.getElementById("offlineStatus"),
   modalBackdrop: document.getElementById("modalBackdrop"),
   accountPanel: document.getElementById("accountPanel"),
   closeAccountButton: document.getElementById("closeAccountButton"),
@@ -80,7 +74,6 @@ init();
 
 function init() {
   els.threshold.textContent = `${settings.maxErrors} errori`;
-  els.sourceInfo.textContent = `${formatNumber(allQuestions.length)} domande ministeriali`;
 
   els.answerButtons.forEach((button) => {
     button.addEventListener("click", () => {
@@ -92,7 +85,6 @@ function init() {
   els.nextButton.addEventListener("click", () => moveBy(1));
   els.finishButton.addEventListener("click", () => finishExam("manual"));
   els.questionDrawerButton.addEventListener("click", openQuestionDrawer);
-  els.mobileQuestionDrawerButton.addEventListener("click", openQuestionDrawer);
   els.closeDrawerButton.addEventListener("click", closeQuestionDrawer);
   els.drawerBackdrop.addEventListener("click", closeQuestionDrawer);
   els.accountButton.addEventListener("click", openAccountPanel);
@@ -130,12 +122,7 @@ function init() {
       answerCurrentQuestion(false);
     }
   });
-  els.newExamButton.addEventListener("click", () => {
-    state = createExam();
-    persistSession();
-    closeQuestionDrawer();
-    render();
-  });
+  els.newExamButton.addEventListener("click", startNewExam);
 
   window.addEventListener("beforeinstallprompt", (event) => {
     event.preventDefault();
@@ -208,17 +195,15 @@ function render() {
   const answeredCount = state.answers.filter((item) => item !== null).length;
 
   els.questionPanel.hidden = false;
+  els.examControls.hidden = false;
   els.resultsPanel.hidden = true;
   els.questionPanel.classList.toggle("has-media", Boolean(question.image));
   els.questionPanel.classList.toggle("no-media", !question.image);
   els.questionPanel.classList.toggle("has-answer", answer !== null);
   els.questionCounter.textContent = `${state.currentIndex + 1}/${state.questions.length}`;
-  els.mobileQuestionCounter.textContent = `${state.currentIndex + 1}/${state.questions.length}`;
   els.answeredCounter.textContent = `${answeredCount}/${state.questions.length}`;
-  els.mobileAnsweredCounter.textContent = `${answeredCount}/${state.questions.length}`;
   const progress = `${(answeredCount / state.questions.length) * 100}%`;
   els.progressBar.style.width = progress;
-  els.mobileProgressBar.style.width = progress;
   els.questionTopic.textContent = question.topic;
   els.questionText.textContent = question.text;
 
@@ -238,6 +223,10 @@ function render() {
 
   els.prevButton.disabled = state.currentIndex === 0;
   els.nextButton.disabled = state.currentIndex === state.questions.length - 1;
+  els.finishButton.classList.toggle(
+    "finish-ready",
+    state.currentIndex === state.questions.length - 1 && state.answers[state.currentIndex] !== null,
+  );
   renderDots();
   tickTimer();
 }
@@ -302,9 +291,21 @@ function closeQuestionDrawer() {
 }
 
 function setDrawerExpanded(isExpanded) {
-  const value = String(isExpanded);
-  els.questionDrawerButton.setAttribute("aria-expanded", value);
-  els.mobileQuestionDrawerButton.setAttribute("aria-expanded", value);
+  els.questionDrawerButton.setAttribute("aria-expanded", String(isExpanded));
+}
+
+function startNewExam() {
+  const hasActiveProgress =
+    !state.finished &&
+    (state.currentIndex > 0 || state.answers.some((answer) => answer !== null));
+  if (hasActiveProgress && !window.confirm("Vuoi abbandonare il test in corso e iniziarne uno nuovo?")) {
+    return;
+  }
+
+  state = createExam();
+  persistSession();
+  closeQuestionDrawer();
+  render();
 }
 
 function moveBy(delta) {
@@ -320,7 +321,6 @@ function tickTimer() {
   if (state.finished) return;
   const remaining = Math.max(0, state.endsAt - Date.now());
   els.timer.textContent = formatDuration(remaining);
-  els.mobileTimer.textContent = formatDuration(remaining);
   if (remaining === 0) finishExam("timeout");
 }
 
@@ -351,16 +351,14 @@ function calculateResult() {
 function renderResults() {
   const result = calculateResult();
   els.questionPanel.hidden = true;
+  els.examControls.hidden = true;
   els.resultsPanel.hidden = false;
   closeQuestionDrawer();
   els.progressBar.style.width = "100%";
   els.questionCounter.textContent = `${state.questions.length}/${state.questions.length}`;
-  els.mobileQuestionCounter.textContent = els.questionCounter.textContent;
   els.answeredCounter.textContent = `${state.answers.filter((item) => item !== null).length}/${state.questions.length}`;
-  els.mobileAnsweredCounter.textContent = els.answeredCounter.textContent;
   els.timer.textContent = formatDuration(Math.max(0, state.endsAt - (state.finishedAt ?? Date.now())));
-  els.mobileTimer.textContent = els.timer.textContent;
-  els.mobileProgressBar.style.width = "100%";
+  els.finishButton.classList.remove("finish-ready");
   els.resultLabel.textContent = result.passed ? "Promosso" : "Respinto";
   els.resultTitle.textContent = result.passed ? "Scheda superata" : "Troppi errori";
   els.resultScore.textContent = `${result.errors} ${result.errors === 1 ? "errore" : "errori"}`;
@@ -891,10 +889,6 @@ function formatDuration(ms) {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
-function formatNumber(value) {
-  return new Intl.NumberFormat("it-IT").format(value);
-}
-
 function formatAverage(value) {
   return new Intl.NumberFormat("it-IT", {
     maximumFractionDigits: 1,
@@ -913,14 +907,12 @@ function formatDate(value) {
 
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) {
-    els.offlineStatus.textContent = "Offline non disponibile";
     return;
   }
 
   try {
     await navigator.serviceWorker.register("./service-worker.js");
-    els.offlineStatus.textContent = "Offline pronta";
   } catch {
-    els.offlineStatus.textContent = "Solo online";
+    // The app still works online if the browser refuses service worker registration.
   }
 }
