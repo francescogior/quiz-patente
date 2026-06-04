@@ -1389,6 +1389,21 @@ body.account-open .account-panel {
     #fffefa;
 }
 
+.ai-explanation-collapsible:not([open]) {
+  gap: 0;
+  border-color: rgba(19, 54, 52, 0.14);
+  background: rgba(255, 253, 250, 0.74);
+}
+
+.ai-explanation-collapsible > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.ai-explanation-collapsible > summary::-webkit-details-marker {
+  display: none;
+}
+
 .ai-explanation-header,
 .ai-explanation-footer {
   display: flex;
@@ -1402,6 +1417,13 @@ body.account-open .account-panel {
   margin: 0;
   color: var(--ink);
   font-size: 0.98rem;
+}
+
+.ai-explanation-hint {
+  margin-left: auto;
+  color: var(--forest);
+  font-size: 0.82rem;
+  font-weight: 900;
 }
 
 .ai-explanation-body {
@@ -1429,6 +1451,11 @@ body.account-open .account-panel {
 .ai-status-error {
   background: #ffe9e4;
   color: var(--red);
+}
+
+.ai-status-muted {
+  background: rgba(232, 243, 247, 0.64);
+  color: var(--muted);
 }
 
 .translated-explanation {

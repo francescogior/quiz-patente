@@ -694,7 +694,7 @@ function renderReviewList() {
     const translatedQuestion = createTranslatedQuestionPanel(question);
     if (translatedQuestion) textGroup.append(translatedQuestion);
 
-    const explanation = createAiExplanationPanel(question, answer);
+    const explanation = createAiExplanationPanel(question, answer, { collapsed: isCorrect });
 
     item.append(textGroup, explanation);
     els.reviewList.append(item);
@@ -715,12 +715,15 @@ function createAnswerPill(label, value, isCorrect, isMissing = false) {
   return pill;
 }
 
-function createAiExplanationPanel(question, answer) {
-  const panel = document.createElement("section");
+function createAiExplanationPanel(question, answer, options = {}) {
+  const shouldCollapse = Boolean(options.collapsed);
+  const panel = document.createElement(shouldCollapse ? "details" : "section");
   panel.className = "ai-explanation";
+  panel.classList.toggle("ai-explanation-collapsible", shouldCollapse);
   panel.dataset.questionId = String(question.id);
+  if (shouldCollapse) panel.dataset.lazyExplanation = "true";
 
-  const header = document.createElement("div");
+  const header = document.createElement(shouldCollapse ? "summary" : "div");
   header.className = "ai-explanation-header";
 
   const title = document.createElement("div");
@@ -728,18 +731,36 @@ function createAiExplanationPanel(question, answer) {
   heading.textContent = "Spiegazione";
   title.append(heading);
 
+  const hint = document.createElement("span");
+  hint.className = "ai-explanation-hint";
+
   const body = document.createElement("div");
   body.className = "ai-explanation-body";
 
   header.append(title);
+  if (shouldCollapse) header.append(hint);
   panel.append(header, body);
 
   const cached = explanationCache.get(question.id);
   if (cached) {
+    panel.dataset.explanationLoaded = "true";
     renderAiExplanationBody(body, question, answer, cached);
+  } else if (shouldCollapse) {
+    renderExplanationPrompt(body);
+    explanationTargets.set(panel, { question, answer });
   } else {
     renderExplanationSkeleton(body);
     observeExplanationPanel(panel, question, answer);
+  }
+
+  if (shouldCollapse) {
+    updateExplanationToggleHint(panel, hint);
+    panel.addEventListener("toggle", () => {
+      updateExplanationToggleHint(panel, hint);
+      if (!panel.open || panel.dataset.explanationLoaded === "true") return;
+      renderExplanationSkeleton(body);
+      loadExplanationPanel(panel);
+    });
   }
 
   return panel;
@@ -841,6 +862,18 @@ function renderExplanationSkeleton(body) {
   `;
 }
 
+function renderExplanationPrompt(body) {
+  body.innerHTML = "";
+  const message = document.createElement("p");
+  message.className = "ai-status ai-status-muted";
+  message.textContent = "Apri per vedere la spiegazione.";
+  body.append(message);
+}
+
+function updateExplanationToggleHint(panel, hint) {
+  hint.textContent = panel.open ? "Nascondi" : "Mostra";
+}
+
 function observeExplanationPanel(panel, question, answer) {
   explanationTargets.set(panel, { question, answer });
   if (!("IntersectionObserver" in window)) {
@@ -864,7 +897,13 @@ function observeExplanationPanel(panel, question, answer) {
 
 async function loadExplanationPanel(panel) {
   const target = explanationTargets.get(panel);
-  if (!target || pendingExplanationLoads.has(target.question.id)) return;
+  if (
+    !target ||
+    panel.dataset.explanationLoaded === "true" ||
+    pendingExplanationLoads.has(target.question.id)
+  ) {
+    return;
+  }
   const body = panel.querySelector(".ai-explanation-body");
   pendingExplanationLoads.add(target.question.id);
 
@@ -874,6 +913,7 @@ async function loadExplanationPanel(panel) {
       body: JSON.stringify({ questionId: target.question.id }),
     });
     explanationCache.set(target.question.id, response.explanation);
+    panel.dataset.explanationLoaded = "true";
     renderAiExplanationBody(body, target.question, target.answer, response.explanation);
   } catch (error) {
     body.innerHTML = "";
