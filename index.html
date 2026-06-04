@@ -202,7 +202,16 @@
           <button class="ghost-button" id="signOutButton" type="button">Esci</button>
         </section>
 
-        <section class="profile-section">
+        <div class="profile-tabs" id="profileTabs" role="tablist" aria-label="Sezioni profilo">
+          <button class="profile-tab active" data-profile-tab="summary" type="button">Riepilogo</button>
+          <button class="profile-tab" data-profile-tab="tests" type="button">Test</button>
+          <button class="profile-tab" data-profile-tab="translations" type="button">Traduzioni</button>
+          <button class="profile-tab" data-profile-tab="admin" id="profileAdminTab" type="button" hidden>
+            Admin
+          </button>
+        </div>
+
+        <section class="profile-view profile-section" data-profile-view="summary">
           <div class="profile-section-title">
             <span class="status-label">Statistiche</span>
             <h3>Le tue simulazioni</h3>
@@ -223,7 +232,7 @@
           </div>
         </section>
 
-        <section class="profile-section">
+        <section class="profile-view profile-section" data-profile-view="tests" hidden>
           <div class="profile-section-title">
             <span class="status-label">Storico</span>
             <h3>Test recenti</h3>
@@ -231,7 +240,7 @@
           <div class="progress-list" id="progressList"></div>
         </section>
 
-        <section class="profile-section language-card">
+        <section class="profile-view profile-section language-card" data-profile-view="translations" hidden>
           <div class="profile-section-title">
             <span class="status-label">Traduzioni</span>
             <h3>Lingua predefinita</h3>
@@ -251,7 +260,7 @@
           </label>
           <p id="translationPreferenceStatus"></p>
         </section>
-        <section class="admin-card" id="adminPanel" hidden>
+        <section class="profile-view admin-card" id="adminPanel" data-profile-view="admin" hidden>
           <div class="admin-head">
             <div>
               <span class="status-label">Admin</span>

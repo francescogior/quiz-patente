@@ -75,6 +75,8 @@ const els = {
   authStatus: document.getElementById("authStatus"),
   accountEmail: document.getElementById("accountEmail"),
   signOutButton: document.getElementById("signOutButton"),
+  profileTabs: document.getElementById("profileTabs"),
+  profileAdminTab: document.getElementById("profileAdminTab"),
   progressTotal: document.getElementById("progressTotal"),
   progressPassed: document.getElementById("progressPassed"),
   progressAverage: document.getElementById("progressAverage"),
@@ -96,6 +98,7 @@ const els = {
 let state = restoreSession() ?? createExam();
 let authState = { token: localStorage.getItem(AUTH_TOKEN_KEY), user: null, progress: null };
 let adminState = { data: null, view: "users", loading: false, error: "" };
+let profileView = "summary";
 let translationState = { language: restoreLanguagePreference() };
 let timerId = 0;
 let deferredInstallPrompt = null;
@@ -130,6 +133,11 @@ function init() {
     els.loginCode.value = els.loginCode.value.replace(/\D/g, "").slice(0, 6);
   });
   els.signOutButton.addEventListener("click", signOut);
+  els.profileTabs.addEventListener("click", (event) => {
+    const tab = event.target.closest("[data-profile-tab]");
+    if (!tab || tab.hidden) return;
+    setProfileView(tab.dataset.profileTab);
+  });
   els.questionLanguageSelect.addEventListener("change", handleQuestionLanguageChange);
   els.accountLanguageSelect.addEventListener("change", handleAccountLanguageChange);
   els.customLanguageInput.addEventListener("input", handleCustomLanguageInput);
@@ -1115,18 +1123,32 @@ function renderAuth() {
   els.accountButton.textContent = isSignedIn ? "Profilo" : "Accedi";
   els.authSignedOut.hidden = isSignedIn;
   els.authSignedIn.hidden = !isSignedIn;
+  els.profileAdminTab.hidden = !authState.user?.isAdmin;
   renderLanguageControls();
 
   if (!isSignedIn) {
+    profileView = "summary";
     renderProgress(null);
     renderAdmin();
+    renderProfileView();
     return;
+  }
+
+  if (!authState.user.isAdmin && profileView === "admin") {
+    profileView = "summary";
   }
 
   els.accountEmail.textContent = authState.user.email;
   renderProgress(authState.progress);
   renderAdmin();
-  if (authState.user.isAdmin && !adminState.data && !adminState.loading && !adminState.error) {
+  renderProfileView();
+  if (
+    authState.user.isAdmin &&
+    profileView === "admin" &&
+    !adminState.data &&
+    !adminState.loading &&
+    !adminState.error
+  ) {
     loadAdminDashboard();
   }
   if (state.finished) {
@@ -1134,6 +1156,37 @@ function renderAuth() {
   } else {
     renderQuestionTranslation(state.questions[state.currentIndex]);
   }
+}
+
+function setProfileView(view) {
+  const allowedViews = ["summary", "tests", "translations", "admin"];
+  profileView = allowedViews.includes(view) ? view : "summary";
+  if (profileView === "admin" && !authState.user?.isAdmin) {
+    profileView = "summary";
+  }
+  renderProfileView();
+  if (
+    profileView === "admin" &&
+    authState.user?.isAdmin &&
+    !adminState.data &&
+    !adminState.loading &&
+    !adminState.error
+  ) {
+    loadAdminDashboard();
+  }
+}
+
+function renderProfileView() {
+  els.profileTabs.querySelectorAll("[data-profile-tab]").forEach((tab) => {
+    const isActive = tab.dataset.profileTab === profileView;
+    tab.classList.toggle("active", isActive);
+    tab.setAttribute("aria-selected", String(isActive));
+  });
+
+  els.authSignedIn.querySelectorAll("[data-profile-view]").forEach((panel) => {
+    const isAdminPanel = panel.dataset.profileView === "admin";
+    panel.hidden = panel.dataset.profileView !== profileView || (isAdminPanel && !authState.user?.isAdmin);
+  });
 }
 
 function setAuthStatus(message) {
@@ -1300,7 +1353,7 @@ async function loadAdminDashboard(force = false) {
 
 function renderAdmin() {
   const isAdmin = Boolean(authState.user?.isAdmin);
-  els.adminPanel.hidden = !isAdmin;
+  els.adminPanel.hidden = !isAdmin || profileView !== "admin";
   if (!isAdmin) {
     els.adminContent.innerHTML = "";
     return;
