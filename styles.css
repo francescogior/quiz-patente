@@ -875,10 +875,10 @@ body.account-open .account-panel {
 .progress-item {
   display: grid;
   grid-template-areas:
-    "pill date"
-    "pill score"
-    "pill meta";
-  grid-template-columns: auto minmax(0, 1fr);
+    "pill date action"
+    "pill score action"
+    "pill meta action";
+  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 4px 12px;
   align-items: center;
   min-width: 0;
@@ -886,6 +886,27 @@ body.account-open .account-panel {
   border: 1px solid var(--line);
   border-radius: 16px;
   background: white;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.progress-item:hover,
+.progress-item:focus-visible {
+  border-color: rgba(25, 119, 86, 0.42);
+  box-shadow: 0 10px 24px rgba(10, 28, 27, 0.08);
+  transform: translateY(-1px);
+}
+
+.progress-item:disabled {
+  cursor: wait;
+  opacity: 0.72;
+  transform: none;
 }
 
 .progress-item strong,
@@ -913,6 +934,18 @@ body.account-open .account-panel {
 
 .progress-item-meta {
   grid-area: meta;
+}
+
+.progress-item-action {
+  grid-area: action;
+  align-self: center;
+  justify-self: end;
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: #e8f3f7;
+  color: var(--forest);
+  font-size: 0.78rem;
+  font-weight: 900;
 }
 
 .progress-item .result-pill {

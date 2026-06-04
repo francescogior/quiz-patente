@@ -6,6 +6,7 @@ const AUTH_TOKEN_KEY = "quiz-patente-auth-token-v1";
 const LANGUAGE_PREF_KEY = "quiz-patente-translation-language-v1";
 const settings = bank?.settings ?? { examQuestions: 30, examMinutes: 20, maxErrors: 3 };
 const allQuestions = bank?.questions ?? [];
+const questionsById = new Map(allQuestions.map((question) => [String(question.id), question]));
 const explanationCache = new Map();
 const explanationTargets = new WeakMap();
 const pendingExplanationLoads = new Set();
@@ -565,10 +566,7 @@ function setDrawerExpanded(isExpanded) {
 }
 
 function startNewExam() {
-  const hasActiveProgress =
-    !state.finished &&
-    (state.currentIndex > 0 || state.answers.some((answer) => answer !== null));
-  if (hasActiveProgress && !window.confirm("Vuoi abbandonare il test in corso e iniziarne uno nuovo?")) {
+  if (hasActiveExamProgress() && !window.confirm("Vuoi abbandonare il test in corso e iniziarne uno nuovo?")) {
     return;
   }
 
@@ -576,6 +574,13 @@ function startNewExam() {
   persistSession();
   closeQuestionDrawer();
   render();
+}
+
+function hasActiveExamProgress() {
+  return (
+    !state.finished &&
+    (state.currentIndex > 0 || state.answers.some((answer) => answer !== null))
+  );
 }
 
 function moveBy(delta) {
@@ -1172,8 +1177,10 @@ function renderProgress(progress, errorMessage = "") {
   }
 
   recent.forEach((exam) => {
-    const item = document.createElement("article");
+    const item = document.createElement("button");
+    item.type = "button";
     item.className = "progress-item";
+    item.setAttribute("aria-label", `Rivedi test del ${formatDate(exam.finishedAt)}`);
 
     const pill = document.createElement("span");
     pill.className = `result-pill ${exam.passed ? "result-pill-correct" : "result-pill-error"}`;
@@ -1190,9 +1197,83 @@ function renderProgress(progress, errorMessage = "") {
     meta.className = "progress-item-meta";
     meta.textContent = `${exam.errorCount} ${exam.errorCount === 1 ? "errore" : "errori"} · ${formatDuration(exam.usedMs)}`;
 
-    item.append(pill, title, detail, meta);
+    const action = document.createElement("span");
+    action.className = "progress-item-action";
+    action.textContent = "Rivedi";
+
+    item.append(pill, title, detail, meta, action);
+    item.addEventListener("click", () => loadSavedExamReview(exam.examId, item));
     els.progressList.append(item);
   });
+}
+
+async function loadSavedExamReview(examId, trigger) {
+  if (hasActiveExamProgress() && !window.confirm("Vuoi abbandonare il test in corso e rivedere questa simulazione?")) {
+    return;
+  }
+
+  const previousText = trigger?.querySelector("strong")?.textContent;
+  if (trigger) {
+    trigger.disabled = true;
+    trigger.classList.add("loading");
+    const title = trigger.querySelector("strong");
+    if (title) title.textContent = "Apro il test...";
+  }
+
+  try {
+    const response = await authFetch(`./api/exam-result?examId=${encodeURIComponent(examId)}`);
+    const savedState = buildSavedExamState(response.exam);
+    localStorage.removeItem(STORAGE_KEY);
+    state = savedState;
+    closeAccountPanel();
+    closeQuestionDrawer();
+    renderResults();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  } catch (error) {
+    window.alert(error.message || "Non riesco ad aprire questo test.");
+  } finally {
+    if (trigger) {
+      trigger.disabled = false;
+      trigger.classList.remove("loading");
+      const title = trigger.querySelector("strong");
+      if (title && previousText) title.textContent = previousText;
+    }
+  }
+}
+
+function buildSavedExamState(exam) {
+  const savedAnswers = Array.isArray(exam?.answers) ? exam.answers : [];
+  const entries = savedAnswers
+    .map((answer) => ({
+      question: questionsById.get(String(answer.questionId)),
+      answer: answer.answer,
+    }))
+    .filter((entry) => entry.question);
+
+  if (entries.length === 0) {
+    throw new Error("Non riesco a ricostruire le domande di questo test.");
+  }
+
+  const finishedAt = parseDateMs(exam.finishedAt, Date.now());
+  const usedMs = Math.max(0, Number(exam.usedMs || 0));
+  const startedAt = parseDateMs(exam.startedAt, finishedAt - usedMs);
+
+  return {
+    id: exam.examId,
+    questions: entries.map((entry) => entry.question),
+    answers: entries.map((entry) => entry.answer),
+    currentIndex: 0,
+    startedAt,
+    endsAt: startedAt + settings.examMinutes * 60 * 1000,
+    finished: true,
+    finishedAt,
+    finishReason: exam.finishReason || "manual",
+  };
+}
+
+function parseDateMs(value, fallback) {
+  const date = new Date(value).getTime();
+  return Number.isNaN(date) ? fallback : date;
 }
 
 async function loadAdminDashboard(force = false) {
