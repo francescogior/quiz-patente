@@ -162,7 +162,7 @@
       <div class="drawer-header">
         <div>
           <span class="status-label">Profilo</span>
-          <h2 id="accountPanelTitle">Progressi</h2>
+          <h2 id="accountPanelTitle">Profilo</h2>
         </div>
         <button class="ghost-button" id="closeAccountButton" type="button">Chiudi</button>
       </div>
@@ -194,29 +194,45 @@
       </div>
 
       <div class="auth-card" id="authSignedIn" hidden>
-        <div class="account-head">
+        <section class="profile-section account-head">
           <div>
             <span class="status-label">Account</span>
             <strong id="accountEmail">utente</strong>
           </div>
           <button class="ghost-button" id="signOutButton" type="button">Esci</button>
-        </div>
-        <div class="progress-summary">
-          <div>
-            <span>Simulazioni</span>
-            <strong id="progressTotal">0</strong>
+        </section>
+
+        <section class="profile-section">
+          <div class="profile-section-title">
+            <span class="status-label">Statistiche</span>
+            <h3>Le tue simulazioni</h3>
           </div>
-          <div>
-            <span>Promosse</span>
-            <strong id="progressPassed">0</strong>
+          <div class="progress-summary">
+            <div>
+              <span>Test fatti</span>
+              <strong id="progressTotal">0</strong>
+            </div>
+            <div>
+              <span>Promossi</span>
+              <strong id="progressPassed">0</strong>
+            </div>
+            <div>
+              <span>Media errori</span>
+              <strong id="progressAverage">0</strong>
+            </div>
           </div>
-          <div>
-            <span>Media errori</span>
-            <strong id="progressAverage">0</strong>
+        </section>
+
+        <section class="profile-section">
+          <div class="profile-section-title">
+            <span class="status-label">Storico</span>
+            <h3>Test recenti</h3>
           </div>
-        </div>
-        <section class="language-card">
-          <div>
+          <div class="progress-list" id="progressList"></div>
+        </section>
+
+        <section class="profile-section language-card">
+          <div class="profile-section-title">
             <span class="status-label">Traduzioni</span>
             <h3>Lingua predefinita</h3>
           </div>
@@ -235,7 +251,6 @@
           </label>
           <p id="translationPreferenceStatus"></p>
         </section>
-        <div class="progress-list" id="progressList"></div>
         <section class="admin-card" id="adminPanel" hidden>
           <div class="admin-head">
             <div>

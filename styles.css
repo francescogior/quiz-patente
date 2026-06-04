@@ -780,14 +780,31 @@ body.account-open .account-panel {
   line-height: 1.35;
 }
 
+.profile-section {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(19, 54, 52, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 253, 250, 0.82);
+}
+
+.profile-section-title h3 {
+  margin: 3px 0 0;
+  color: var(--ink);
+  font-size: 1rem;
+}
+
 .account-head {
   display: flex;
   gap: 12px;
   align-items: center;
   justify-content: space-between;
   min-width: 0;
-  padding-bottom: 12px;
-  border-bottom: 1px solid rgba(19, 54, 52, 0.1);
+  background:
+    linear-gradient(135deg, rgba(25, 119, 86, 0.08), rgba(26, 135, 165, 0.06)),
+    #fffefa;
 }
 
 .account-head strong {
@@ -841,6 +858,9 @@ body.account-open .account-panel {
   display: grid;
   gap: 8px;
   min-width: 0;
+  max-height: min(42svh, 420px);
+  overflow: auto;
+  padding-right: 2px;
 }
 
 .progress-empty {
@@ -854,8 +874,13 @@ body.account-open .account-panel {
 
 .progress-item {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "pill date"
+    "pill score"
+    "pill meta";
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 4px 12px;
+  align-items: center;
   min-width: 0;
   padding: 12px;
   border: 1px solid var(--line);
@@ -869,6 +894,7 @@ body.account-open .account-panel {
 }
 
 .progress-item strong {
+  grid-area: date;
   overflow: hidden;
   color: var(--ink);
   text-overflow: ellipsis;
@@ -881,8 +907,16 @@ body.account-open .account-panel {
   font-weight: 760;
 }
 
+.progress-item-score {
+  grid-area: score;
+}
+
+.progress-item-meta {
+  grid-area: meta;
+}
+
 .progress-item .result-pill {
-  grid-row: span 2;
+  grid-area: pill;
   align-self: center;
 }
 
@@ -890,18 +924,10 @@ body.account-open .account-panel {
   display: grid;
   gap: 10px;
   min-width: 0;
-  padding: 12px;
   border: 1px solid rgba(26, 135, 165, 0.18);
-  border-radius: 18px;
   background:
     linear-gradient(135deg, rgba(26, 135, 165, 0.07), rgba(244, 200, 75, 0.08)),
     #fffefa;
-}
-
-.language-card h3 {
-  margin: 3px 0 0;
-  color: var(--ink);
-  font-size: 1rem;
 }
 
 .language-card label,

@@ -1107,7 +1107,7 @@ async function signOut() {
 
 function renderAuth() {
   const isSignedIn = Boolean(authState.user);
-  els.accountButton.textContent = isSignedIn ? "Progressi" : "Accedi";
+  els.accountButton.textContent = isSignedIn ? "Profilo" : "Accedi";
   els.authSignedOut.hidden = isSignedIn;
   els.authSignedIn.hidden = !isSignedIn;
   renderLanguageControls();
@@ -1166,7 +1166,7 @@ function renderProgress(progress, errorMessage = "") {
   if (recent.length === 0) {
     const item = document.createElement("p");
     item.className = "progress-empty";
-    item.textContent = "Nessuna simulazione salvata.";
+    item.textContent = "I tuoi test completati appariranno qui.";
     els.progressList.append(item);
     return;
   }
@@ -1175,17 +1175,22 @@ function renderProgress(progress, errorMessage = "") {
     const item = document.createElement("article");
     item.className = "progress-item";
 
-    const title = document.createElement("strong");
-    title.textContent = formatDate(exam.finishedAt);
-
-    const detail = document.createElement("span");
-    detail.textContent = `${exam.errorCount} ${exam.errorCount === 1 ? "errore" : "errori"} · ${formatDuration(exam.usedMs)}`;
-
     const pill = document.createElement("span");
     pill.className = `result-pill ${exam.passed ? "result-pill-correct" : "result-pill-error"}`;
     pill.textContent = exam.passed ? "Promossa" : "Respinta";
 
-    item.append(title, detail, pill);
+    const title = document.createElement("strong");
+    title.textContent = formatDate(exam.finishedAt);
+
+    const detail = document.createElement("span");
+    detail.className = "progress-item-score";
+    detail.textContent = `${exam.correctCount}/${exam.totalQuestions} corrette`;
+
+    const meta = document.createElement("span");
+    meta.className = "progress-item-meta";
+    meta.textContent = `${exam.errorCount} ${exam.errorCount === 1 ? "errore" : "errori"} · ${formatDuration(exam.usedMs)}`;
+
+    item.append(pill, title, detail, meta);
     els.progressList.append(item);
   });
 }
