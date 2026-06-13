@@ -889,6 +889,115 @@ body.account-open .account-panel {
   line-height: 1;
 }
 
+.revision-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(25, 119, 86, 0.18);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(25, 119, 86, 0.08), rgba(26, 135, 165, 0.08)),
+    #fffefa;
+}
+
+.revision-card strong {
+  display: block;
+  margin-top: 2px;
+  color: var(--ink);
+  font-size: 1rem;
+  line-height: 1.12;
+}
+
+.revision-card p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 760;
+  line-height: 1.28;
+}
+
+.revision-card .primary-button {
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid rgba(19, 54, 52, 0.1);
+  background: var(--forest);
+  color: white;
+  box-shadow: 0 12px 24px rgba(6, 63, 61, 0.18);
+  white-space: nowrap;
+}
+
+.progress-chart {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #f7faf6;
+}
+
+.progress-chart-header {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.progress-chart-header strong {
+  color: var(--ink);
+  font-size: 0.95rem;
+}
+
+.progress-chart-header span,
+.progress-chart-empty {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 760;
+}
+
+.progress-chart-empty {
+  margin: 0;
+}
+
+.progress-bars {
+  display: grid;
+  grid-auto-columns: minmax(12px, 1fr);
+  grid-auto-flow: column;
+  gap: 6px;
+  align-items: end;
+  height: 58px;
+  min-width: 0;
+  padding: 8px 6px 0;
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(19, 54, 52, 0.08) 1px, transparent 1px),
+    rgba(255, 255, 255, 0.72);
+  background-size: 100% 50%;
+}
+
+.progress-bar-point {
+  display: block;
+  align-self: end;
+  min-width: 0;
+  height: var(--score);
+  min-height: 6px;
+  border-radius: 999px 999px 5px 5px;
+  background: linear-gradient(180deg, #1a87a5, #197756);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.44);
+}
+
+.progress-bar-point.failed {
+  background: linear-gradient(180deg, #e99682, #c8432d);
+}
+
+.progress-bar-point.revision {
+  background: linear-gradient(180deg, #70b8cb, #1a87a5);
+}
+
 .progress-list {
   display: grid;
   gap: 8px;
@@ -1416,6 +1525,11 @@ body.account-open .account-panel {
 .result-pill-correct {
   background: #eaf7f0;
   color: var(--green);
+}
+
+.result-pill-neutral {
+  background: #e8f3f7;
+  color: var(--aqua);
 }
 
 .topic-chip {
@@ -1951,6 +2065,30 @@ body.account-open .account-panel {
 
   .progress-summary {
     grid-template-columns: 1fr;
+  }
+
+  .revision-card {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .revision-card .primary-button {
+    width: 100%;
+  }
+
+  .progress-chart {
+    padding: 10px;
+  }
+
+  .progress-chart-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .progress-bars {
+    height: 48px;
+    gap: 5px;
   }
 
   .admin-summary {

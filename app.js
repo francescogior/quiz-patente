@@ -80,6 +80,9 @@ const els = {
   progressTotal: document.getElementById("progressTotal"),
   progressPassed: document.getElementById("progressPassed"),
   progressAverage: document.getElementById("progressAverage"),
+  revisionExamButton: document.getElementById("revisionExamButton"),
+  revisionSummary: document.getElementById("revisionSummary"),
+  progressChart: document.getElementById("progressChart"),
   accountLanguageSelect: document.getElementById("accountLanguageSelect"),
   customLanguageField: document.getElementById("customLanguageField"),
   customLanguageInput: document.getElementById("customLanguageInput"),
@@ -133,6 +136,7 @@ function init() {
     els.loginCode.value = els.loginCode.value.replace(/\D/g, "").slice(0, 6);
   });
   els.signOutButton.addEventListener("click", signOut);
+  els.revisionExamButton.addEventListener("click", startRevisionExam);
   els.profileTabs.addEventListener("click", (event) => {
     const tab = event.target.closest("[data-profile-tab]");
     if (!tab || tab.hidden) return;
@@ -196,11 +200,17 @@ function init() {
   timerId = window.setInterval(tickTimer, 500);
 }
 
-function createExam() {
+function createExam(options = {}) {
   const now = Date.now();
-  const questions = sample(allQuestions, settings.examQuestions);
+  const mode = options.mode || "simulation";
+  const fallbackId = crypto.randomUUID?.() ?? String(now);
+  const sourceQuestions = Array.isArray(options.questions) && options.questions.length > 0
+    ? options.questions
+    : allQuestions;
+  const questions = sample(sourceQuestions, options.count || settings.examQuestions);
   return {
-    id: crypto.randomUUID?.() ?? String(now),
+    id: mode === "revision" ? `revision-${fallbackId}` : fallbackId,
+    mode,
     questions,
     answers: Array.from({ length: questions.length }, () => null),
     currentIndex: 0,
@@ -584,6 +594,33 @@ function startNewExam() {
   render();
 }
 
+function startRevisionExam() {
+  const revisionIds = authState.progress?.revision?.questionIds ?? [];
+  const revisionQuestions = revisionIds
+    .map((id) => questionsById.get(String(id)))
+    .filter(Boolean);
+
+  if (revisionQuestions.length === 0) {
+    window.alert("Non ci sono ancora errori salvati da ripassare.");
+    return;
+  }
+
+  if (hasActiveExamProgress() && !window.confirm("Vuoi abbandonare il test in corso e iniziare un ripasso?")) {
+    return;
+  }
+
+  state = createExam({
+    mode: "revision",
+    questions: revisionQuestions,
+    count: Math.min(settings.examQuestions, revisionQuestions.length),
+  });
+  persistSession();
+  closeAccountPanel();
+  closeQuestionDrawer();
+  render();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
 function hasActiveExamProgress() {
   return (
     !state.finished &&
@@ -643,7 +680,12 @@ function renderResults() {
   els.timer.textContent = formatDuration(Math.max(0, state.endsAt - (state.finishedAt ?? Date.now())));
   els.finishButton.classList.remove("finish-ready");
   els.resultLabel.textContent = result.passed ? "Promosso" : "Respinto";
-  els.resultTitle.textContent = result.passed ? "Scheda superata" : "Troppi errori";
+  if (state.mode === "revision") {
+    els.resultLabel.textContent = "Ripasso";
+    els.resultTitle.textContent = result.errors === 0 ? "Errori sistemati" : "Ripasso completato";
+  } else {
+    els.resultTitle.textContent = result.passed ? "Scheda superata" : "Troppi errori";
+  }
   els.resultScore.textContent = `${result.errors} ${result.errors === 1 ? "errore" : "errori"}`;
   els.correctCount.textContent = String(result.correct);
   els.errorCount.textContent = String(result.errors);
@@ -1207,11 +1249,14 @@ async function loadProgress() {
 function renderProgress(progress, errorMessage = "") {
   const summary = progress?.summary ?? { total: 0, passed: 0, averageErrors: 0 };
   const recent = progress?.recent ?? [];
+  const revision = progress?.revision ?? { uniqueWrongQuestions: 0, totalWrongAnswers: 0, questionIds: [] };
 
   els.progressTotal.textContent = String(summary.total);
   els.progressPassed.textContent = String(summary.passed);
   els.progressAverage.textContent = formatAverage(summary.averageErrors);
   els.progressList.innerHTML = "";
+  renderRevisionCard(revision);
+  renderProgressChart(recent);
 
   if (errorMessage) {
     const item = document.createElement("p");
@@ -1237,7 +1282,12 @@ function renderProgress(progress, errorMessage = "") {
 
     const pill = document.createElement("span");
     pill.className = `result-pill ${exam.passed ? "result-pill-correct" : "result-pill-error"}`;
-    pill.textContent = exam.passed ? "Promossa" : "Respinta";
+    if (exam.mode === "revision") {
+      pill.className = "result-pill result-pill-neutral";
+      pill.textContent = "Ripasso";
+    } else {
+      pill.textContent = exam.passed ? "Promossa" : "Respinta";
+    }
 
     const title = document.createElement("strong");
     title.textContent = formatDate(exam.finishedAt);
@@ -1258,6 +1308,81 @@ function renderProgress(progress, errorMessage = "") {
     item.addEventListener("click", () => loadSavedExamReview(exam.examId, item));
     els.progressList.append(item);
   });
+}
+
+function renderRevisionCard(revision) {
+  const uniqueWrongQuestions = Number(revision?.uniqueWrongQuestions || 0);
+  const totalWrongAnswers = Number(revision?.totalWrongAnswers || 0);
+  const availableQuestions = (revision?.questionIds || [])
+    .map((id) => questionsById.get(String(id)))
+    .filter(Boolean).length;
+
+  els.revisionExamButton.disabled = availableQuestions === 0;
+
+  if (availableQuestions === 0) {
+    els.revisionSummary.textContent =
+      totalWrongAnswers > 0
+        ? "Ho trovato errori salvati, ma non riesco a ricostruire quelle domande in questa banca dati."
+        : "Completa almeno un test con qualche errore per creare un ripasso mirato.";
+    return;
+  }
+
+  const plannedQuestions = Math.min(settings.examQuestions, availableQuestions);
+  els.revisionSummary.textContent =
+    `${uniqueWrongQuestions} ${uniqueWrongQuestions === 1 ? "domanda sbagliata" : "domande sbagliate"} ` +
+    `nei test salvati. Il prossimo ripasso usera ${plannedQuestions} ` +
+    `${plannedQuestions === 1 ? "domanda" : "domande"}.`;
+}
+
+function renderProgressChart(recent) {
+  els.progressChart.innerHTML = "";
+  if (!Array.isArray(recent) || recent.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "progress-chart-empty";
+    empty.textContent = "Qui vedrai l'andamento appena avrai completato qualche test.";
+    els.progressChart.append(empty);
+    return;
+  }
+
+  const points = recent.slice(0, 12).reverse();
+  const averageScore =
+    points.reduce((sum, exam) => sum + progressScore(exam), 0) / points.length;
+
+  const header = document.createElement("div");
+  header.className = "progress-chart-header";
+
+  const title = document.createElement("strong");
+  title.textContent = "Andamento";
+
+  const detail = document.createElement("span");
+  detail.textContent = `${Math.round(averageScore * 100)}% corrette di media negli ultimi ${points.length}`;
+  header.append(title, detail);
+
+  const bars = document.createElement("div");
+  bars.className = "progress-bars";
+
+  points.forEach((exam, index) => {
+    const score = progressScore(exam);
+    const bar = document.createElement("span");
+    bar.className = `progress-bar-point ${
+      exam.mode === "revision" ? "revision" : exam.passed ? "passed" : "failed"
+    }`;
+    bar.style.setProperty("--score", `${Math.max(8, Math.round(score * 100))}%`);
+    bar.title = `${formatDate(exam.finishedAt)}: ${exam.correctCount}/${exam.totalQuestions} corrette`;
+    bar.setAttribute(
+      "aria-label",
+      `Test ${index + 1}: ${exam.correctCount} corrette su ${exam.totalQuestions}`,
+    );
+    bars.append(bar);
+  });
+
+  els.progressChart.append(header, bars);
+}
+
+function progressScore(exam) {
+  const total = Number(exam?.totalQuestions || 0);
+  if (!total) return 0;
+  return Math.max(0, Math.min(1, Number(exam.correctCount || 0) / total));
 }
 
 async function loadSavedExamReview(examId, trigger) {
@@ -1313,6 +1438,7 @@ function buildSavedExamState(exam) {
 
   return {
     id: exam.examId,
+    mode: String(exam.examId || "").startsWith("revision-") ? "revision" : "simulation",
     questions: entries.map((entry) => entry.question),
     answers: entries.map((entry) => entry.answer),
     currentIndex: 0,
