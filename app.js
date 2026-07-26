@@ -4,6 +4,16 @@ const STORAGE_KEY = "quiz-patente-session-v1";
 const HISTORY_KEY = "quiz-patente-history-v1";
 const AUTH_TOKEN_KEY = "quiz-patente-auth-token-v1";
 const LANGUAGE_PREF_KEY = "quiz-patente-translation-language-v1";
+const PLUS_TOKEN_LEGACY_KEY = "quiz-patente-plus-token-v1";
+const PLUS_TOKENS_KEY = "quiz-patente-plus-tokens-v2";
+const PLUS_PENDING_SESSION_KEY = "quiz-patente-plus-pending-session-v1";
+const PLUS_CHECKOUT_URL = "https://proofkit.realb.it/api/checkout";
+const PLUS_PRODUCT = {
+  experimentSlug: "quizpatente-plus",
+  title: "Quiz Patente Plus — 30 giorni",
+  priceCents: 399,
+  returnUrl: "https://quizpatente.realb.it/",
+};
 const settings = bank?.settings ?? { examQuestions: 30, examMinutes: 20, maxErrors: 3 };
 const allQuestions = bank?.questions ?? [];
 const questionsById = new Map(allQuestions.map((question) => [String(question.id), question]));
@@ -87,6 +97,11 @@ const els = {
   customLanguageField: document.getElementById("customLanguageField"),
   customLanguageInput: document.getElementById("customLanguageInput"),
   translationPreferenceStatus: document.getElementById("translationPreferenceStatus"),
+  plusStatus: document.getElementById("plusStatus"),
+  plusConsentRow: document.getElementById("plusConsentRow"),
+  plusConsent: document.getElementById("plusConsent"),
+  plusBuyButton: document.getElementById("plusBuyButton"),
+  plusResetButton: document.getElementById("plusResetButton"),
   progressList: document.getElementById("progressList"),
   adminPanel: document.getElementById("adminPanel"),
   refreshAdminButton: document.getElementById("refreshAdminButton"),
@@ -100,6 +115,15 @@ const els = {
 
 let state = restoreSession() ?? createExam();
 let authState = { token: localStorage.getItem(AUTH_TOKEN_KEY), user: null, progress: null };
+let plusState = {
+  token: null,
+  active: false,
+  expiresAt: null,
+  loading: false,
+  message: "",
+  recoverable: false,
+  pendingSession: localStorage.getItem(PLUS_PENDING_SESSION_KEY),
+};
 let adminState = { data: null, view: "users", loading: false, error: "" };
 let profileView = "summary";
 let translationState = { language: restoreLanguagePreference() };
@@ -145,6 +169,8 @@ function init() {
   els.questionLanguageSelect.addEventListener("change", handleQuestionLanguageChange);
   els.accountLanguageSelect.addEventListener("change", handleAccountLanguageChange);
   els.customLanguageInput.addEventListener("input", handleCustomLanguageInput);
+  els.plusBuyButton.addEventListener("click", startPlusCheckout);
+  els.plusResetButton.addEventListener("click", clearPendingPlusCheckout);
   els.refreshAdminButton.addEventListener("click", () => loadAdminDashboard(true));
   els.adminTabs.addEventListener("click", (event) => {
     const tab = event.target.closest("[data-admin-view]");
@@ -426,6 +452,7 @@ async function loadTranslation(question, explanation) {
 
   const promise = authFetch("./api/translation", {
     method: "POST",
+    headers: plusHeaders(),
     body: JSON.stringify({
       questionId: question.id,
       language,
@@ -965,6 +992,10 @@ async function loadExplanationPanel(panel) {
   try {
     const response = await fetchJson("./api/explanation", {
       method: "POST",
+      headers: {
+        ...(authState.token ? { Authorization: `Bearer ${authState.token}` } : {}),
+        ...plusHeaders(),
+      },
       body: JSON.stringify({ questionId: target.question.id }),
     });
     explanationCache.set(target.question.id, response.explanation);
@@ -1021,7 +1052,10 @@ function createReportForm(questionId, explanation) {
     status.textContent = "Invio...";
 
     try {
-      await fetchJson("./api/report-explanation", {
+      if (!authState.token) {
+        throw new Error("Accedi per inviare una segnalazione.");
+      }
+      await authFetch("./api/report-explanation", {
         method: "POST",
         body: JSON.stringify({
           questionId,
@@ -1049,13 +1083,23 @@ function createReportForm(questionId, explanation) {
 
 async function initAuth() {
   renderAuth();
-  if (!authState.token) return;
+  if (!authState.token) {
+    const params = new URLSearchParams(window.location.search);
+    const fragment = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    if (params.has("checkout") || fragment.has("plus_token")) {
+      openAccountPanel();
+      setAuthStatus("Accedi per completare l’attivazione di Quiz Patente Plus.");
+    }
+    return;
+  }
 
   try {
     const response = await authFetch("./api/auth-me");
     authState.user = response.user;
     authState.progress = response.progress;
+    plusState.token = storedPlusTokenForUser(response.user.id);
     renderAuth();
+    await syncPlusAccessFromLocation();
   } catch {
     localStorage.removeItem(AUTH_TOKEN_KEY);
     authState = { token: null, user: null, progress: null };
@@ -1129,11 +1173,13 @@ async function verifyLoginCode(event) {
     authState.token = response.token;
     authState.user = response.user;
     authState.progress = response.progress;
+    plusState.token = storedPlusTokenForUser(response.user.id);
     adminState = { data: null, view: "users", loading: false, error: "" };
     localStorage.setItem(AUTH_TOKEN_KEY, response.token);
     els.loginCode.value = "";
     setAuthStatus("");
     renderAuth();
+    await syncPlusAccessFromLocation();
     await syncFinishedExam();
   } catch (error) {
     setAuthStatus(error.message || "Codice non valido.");
@@ -1145,6 +1191,15 @@ async function verifyLoginCode(event) {
 async function signOut() {
   const token = authState.token;
   authState = { token: null, user: null, progress: null };
+  plusState = {
+    token: null,
+    active: false,
+    expiresAt: null,
+    loading: false,
+    message: "",
+    recoverable: false,
+    pendingSession: localStorage.getItem(PLUS_PENDING_SESSION_KEY),
+  };
   adminState = { data: null, view: "users", loading: false, error: "" };
   localStorage.removeItem(AUTH_TOKEN_KEY);
   renderAuth();
@@ -1162,11 +1217,12 @@ async function signOut() {
 
 function renderAuth() {
   const isSignedIn = Boolean(authState.user);
-  els.accountButton.textContent = isSignedIn ? "Profilo" : "Accedi";
+  els.accountButton.textContent = isSignedIn ? (plusState.active ? "Plus · Profilo" : "Profilo") : "Accedi";
   els.authSignedOut.hidden = isSignedIn;
   els.authSignedIn.hidden = !isSignedIn;
   els.profileAdminTab.hidden = !authState.user?.isAdmin;
   renderLanguageControls();
+  renderPlus();
 
   if (!isSignedIn) {
     profileView = "summary";
@@ -1201,7 +1257,7 @@ function renderAuth() {
 }
 
 function setProfileView(view) {
-  const allowedViews = ["summary", "tests", "translations", "admin"];
+  const allowedViews = ["summary", "tests", "translations", "plus", "admin"];
   profileView = allowedViews.includes(view) ? view : "summary";
   if (profileView === "admin" && !authState.user?.isAdmin) {
     profileView = "summary";
@@ -1229,6 +1285,292 @@ function renderProfileView() {
     const isAdminPanel = panel.dataset.profileView === "admin";
     panel.hidden = panel.dataset.profileView !== profileView || (isAdminPanel && !authState.user?.isAdmin);
   });
+}
+
+function plusHeaders() {
+  return plusState.token ? { "X-Quizpatente-Plus": plusState.token } : {};
+}
+
+function readPlusTokenMap() {
+  try {
+    const value = JSON.parse(localStorage.getItem(PLUS_TOKENS_KEY) || "{}");
+    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  } catch {
+    return {};
+  }
+}
+
+function storedPlusTokenForUser(userId) {
+  if (!userId) return null;
+  return readPlusTokenMap()[String(userId)] || localStorage.getItem(PLUS_TOKEN_LEGACY_KEY);
+}
+
+function storePlusTokenForUser(userId, token) {
+  if (!userId || !token) return;
+  const tokens = readPlusTokenMap();
+  tokens[String(userId)] = token;
+  localStorage.setItem(PLUS_TOKENS_KEY, JSON.stringify(tokens));
+  localStorage.removeItem(PLUS_TOKEN_LEGACY_KEY);
+}
+
+function removePlusTokenForUser(userId) {
+  if (!userId) return;
+  const tokens = readPlusTokenMap();
+  delete tokens[String(userId)];
+  localStorage.setItem(PLUS_TOKENS_KEY, JSON.stringify(tokens));
+  localStorage.removeItem(PLUS_TOKEN_LEGACY_KEY);
+}
+
+async function syncPlusAccessFromLocation() {
+  if (!authState.user || !authState.token) return;
+
+  const url = new URL(window.location.href);
+  const fragment = new URLSearchParams(url.hash.replace(/^#/, ""));
+  const importedToken = fragment.get("plus_token");
+  const checkoutState = url.searchParams.get("checkout");
+  const returnedSession = url.searchParams.get("session_id");
+  if (returnedSession) {
+    plusState.pendingSession = returnedSession;
+    localStorage.setItem(PLUS_PENDING_SESSION_KEY, returnedSession);
+  }
+
+  if (importedToken) {
+    const previousToken = plusState.token;
+    plusState.token = importedToken;
+    const imported = await refreshPlusAccess({ persistOnSuccess: true });
+    if (!imported.checked) {
+      plusState.token = importedToken;
+      plusState.active = false;
+      plusState.expiresAt = null;
+      plusState.recoverable = true;
+    } else if (!imported.active) {
+      plusState.token = previousToken;
+      plusState.active = false;
+      plusState.expiresAt = null;
+      plusState.recoverable = false;
+      if (previousToken) {
+        await refreshPlusAccess({ persistOnSuccess: true, removeInvalid: true });
+      }
+    }
+    plusState.message = imported.active
+      ? "Quiz Patente Plus è attivo su questo dispositivo."
+      : imported.checked
+        ? "Il link Plus non è valido per questo account o è scaduto."
+        : "Non riesco a verificare il link ora. Puoi riprovare.";
+    setProfileView("plus");
+    openAccountPanel();
+  } else if (checkoutState === "cancelled") {
+    await clearPendingPlusCheckout({ cancelled: true });
+  } else if (checkoutState === "success" || plusState.pendingSession) {
+    await activatePlusCheckout(plusState.pendingSession);
+  } else {
+    await refreshPlusAccess({ persistOnSuccess: true, removeInvalid: true });
+  }
+
+  if (importedToken || checkoutState || returnedSession) {
+    ["checkout", "session_id"].forEach((key) => url.searchParams.delete(key));
+    fragment.delete("plus_token");
+    url.hash = fragment.toString() ? `#${fragment}` : "";
+    const cleanUrl = `${url.pathname}${url.search}${url.hash}`;
+    window.history.replaceState({}, "", cleanUrl);
+  }
+}
+
+async function refreshPlusAccess({ persistOnSuccess = false, removeInvalid = false } = {}) {
+  if (!authState.user) {
+    plusState.active = false;
+    plusState.expiresAt = null;
+    plusState.recoverable = false;
+    renderPlus();
+    return { checked: true, active: false };
+  }
+
+  try {
+    const response = await authFetch("./api/plus-status", {
+      headers: plusHeaders(),
+    });
+    if (response.token) plusState.token = response.token;
+    plusState.active = Boolean(response.access?.active);
+    plusState.expiresAt = response.access?.expiresAt || null;
+    plusState.recoverable = false;
+    if (plusState.active && plusState.token && (persistOnSuccess || response.token)) {
+      storePlusTokenForUser(authState.user.id, plusState.token);
+    }
+    if (!plusState.active) {
+      if (removeInvalid) {
+        removePlusTokenForUser(authState.user.id);
+        plusState.token = null;
+      }
+    }
+    renderAuth();
+    return { checked: true, active: plusState.active };
+  } catch (error) {
+    plusState.active = false;
+    plusState.recoverable = true;
+    plusState.message = error.message || "Non riesco a verificare Plus ora.";
+    renderAuth();
+    return { checked: false, active: false };
+  }
+}
+
+async function activatePlusCheckout(sessionId) {
+  if (!sessionId) {
+    plusState.message = "Riferimento del pagamento mancante. Contatta l’assistenza.";
+    plusState.recoverable = false;
+    renderPlus();
+    return false;
+  }
+  plusState.loading = true;
+  plusState.pendingSession = sessionId;
+  localStorage.setItem(PLUS_PENDING_SESSION_KEY, sessionId);
+  plusState.message = "Verifico il pagamento e attivo Plus...";
+  setProfileView("plus");
+  openAccountPanel();
+  renderPlus();
+
+  try {
+    const response = await authFetch("./api/plus-activate", {
+      method: "POST",
+      body: JSON.stringify({ sessionId }),
+    });
+    plusState.token = response.token;
+    plusState.active = Boolean(response.access?.active);
+    plusState.expiresAt = response.access?.expiresAt || null;
+    plusState.recoverable = false;
+    plusState.pendingSession = null;
+    plusState.message = "Pagamento confermato. Quiz Patente Plus è attivo.";
+    storePlusTokenForUser(authState.user.id, response.token);
+    localStorage.removeItem(PLUS_PENDING_SESSION_KEY);
+    return true;
+  } catch (error) {
+    plusState.message = error.message || "Non riesco ad attivare Plus.";
+    plusState.recoverable = true;
+    return false;
+  } finally {
+    plusState.loading = false;
+    renderAuth();
+  }
+}
+
+async function startPlusCheckout() {
+  if (!authState.user || !authState.token) {
+    setAuthStatus("Accedi prima di acquistare Quiz Patente Plus.");
+    return;
+  }
+  if (plusState.active) return;
+  if (plusState.pendingSession) {
+    await activatePlusCheckout(plusState.pendingSession);
+    return;
+  }
+  if (plusState.recoverable) {
+    await refreshPlusAccess({ persistOnSuccess: true });
+    return;
+  }
+  if (!els.plusConsent.checked) {
+    plusState.message = "Conferma l’inizio immediato dell’accesso digitale.";
+    renderPlus();
+    els.plusConsent.focus();
+    return;
+  }
+
+  plusState.loading = true;
+  plusState.message = "Apro il pagamento sicuro...";
+  renderPlus();
+
+  try {
+    const response = await fetchJson(PLUS_CHECKOUT_URL, {
+      method: "POST",
+      body: JSON.stringify({
+        ...PLUS_PRODUCT,
+        email: authState.user.email,
+        immediateAccessConsent: true,
+      }),
+    });
+    const checkoutUrl = new URL(response.checkoutUrl || "");
+    if (
+      checkoutUrl.protocol !== "https:" ||
+      checkoutUrl.hostname !== "checkout.stripe.com" ||
+      !response.sessionId
+    ) {
+      throw new Error("Link di pagamento non valido.");
+    }
+    plusState.pendingSession = response.sessionId;
+    localStorage.setItem(PLUS_PENDING_SESSION_KEY, response.sessionId);
+    window.location.assign(checkoutUrl.toString());
+  } catch (error) {
+    plusState.loading = false;
+    plusState.message = error.message || "Pagamento non disponibile ora.";
+    renderPlus();
+  }
+}
+
+async function clearPendingPlusCheckout(options = {}) {
+  const sessionId = plusState.pendingSession;
+  if (!sessionId) return;
+
+  plusState.loading = true;
+  plusState.message = "Controllo che il pagamento non sia stato completato...";
+  renderPlus();
+
+  try {
+    const response = await authFetch("./api/plus-checkout-reset", {
+      method: "POST",
+      body: JSON.stringify({ sessionId }),
+    });
+    if (!response.discardable) {
+      throw new Error("Questo pagamento non può essere scartato.");
+    }
+    plusState.pendingSession = null;
+    plusState.recoverable = false;
+    plusState.message = options.cancelled
+      ? "Pagamento annullato: Stripe conferma che non è stato addebitato nulla."
+      : "Stripe conferma che il tentativo non è stato pagato. Puoi ricominciare.";
+    localStorage.removeItem(PLUS_PENDING_SESSION_KEY);
+  } catch (error) {
+    plusState.message =
+      error.message ||
+      "Non posso scartare questo tentativo finché il suo stato non è certo. Riprova l’attivazione o contatta l’assistenza.";
+    plusState.recoverable = true;
+  } finally {
+    plusState.loading = false;
+    setProfileView("plus");
+    openAccountPanel();
+    renderAuth();
+  }
+}
+
+function renderPlus() {
+  if (!els.plusStatus) return;
+  const active = plusState.active && plusState.expiresAt;
+
+  if (active) {
+    const expiry = new Intl.DateTimeFormat("it-IT", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    }).format(new Date(plusState.expiresAt));
+    els.plusStatus.textContent = plusState.message || `Plus attivo fino al ${expiry}.`;
+    els.plusBuyButton.textContent = `Plus attivo fino al ${expiry}`;
+    els.plusBuyButton.disabled = true;
+    els.plusResetButton.hidden = true;
+    els.plusConsentRow.hidden = true;
+  } else {
+    els.plusStatus.textContent =
+      plusState.message ||
+      "Le simulazioni ufficiali, lo storico e i contenuti già disponibili restano gratuiti.";
+    els.plusBuyButton.textContent = plusState.loading
+      ? "Attendo..."
+      : plusState.pendingSession
+        ? "Riprova l’attivazione"
+        : plusState.recoverable
+          ? "Riprova la verifica"
+          : "Attiva Plus — €3,99";
+    els.plusBuyButton.disabled = plusState.loading;
+    els.plusResetButton.hidden = !plusState.pendingSession || plusState.loading;
+    els.plusConsentRow.hidden = Boolean(
+      plusState.pendingSession || plusState.recoverable,
+    );
+  }
 }
 
 function setAuthStatus(message) {

@@ -1,5 +1,8 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const { authenticateRequest } = require("../lib/user-store");
+const { requirePlusAccess } = require("../lib/plus-access");
+const { consumePlusGeneration } = require("../lib/plus-usage");
 
 const PROMPT_VERSION = "quiz-patente-explanation-v2";
 const TABLE = "question_explanations";
@@ -9,6 +12,7 @@ let questionMap;
 module.exports = async function handler(req, res) {
   if (req.method !== "POST") return sendJson(res, 405, { error: "Metodo non supportato." });
 
+  let generationClaim;
   try {
     const body = await readJson(req);
     const questionId = Number(body.questionId);
@@ -23,6 +27,13 @@ module.exports = async function handler(req, res) {
       });
     }
 
+    const { user } = await authenticateRequest(req);
+    requirePlusAccess(req, user);
+    generationClaim = await consumePlusGeneration(
+      user,
+      "explanation",
+      `${PROMPT_VERSION}:${question.id}`,
+    );
     const generated = await generateExplanation(question, req);
     const row = await saveExplanation(question, generated);
 
@@ -31,6 +42,11 @@ module.exports = async function handler(req, res) {
       explanation: normalizeExplanation(row || { ...generated, question_id: question.id }),
     });
   } catch (error) {
+    await generationClaim?.release().catch((releaseError) => {
+      console.error("Explanation generation lock release failed", {
+        message: releaseError.message,
+      });
+    });
     return sendJson(res, error.statusCode || 500, {
       error: error.publicMessage || "Non riesco a generare la spiegazione ora.",
     });

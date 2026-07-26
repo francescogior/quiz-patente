@@ -748,6 +748,18 @@ body.account-open .account-panel {
   min-width: 0;
 }
 
+.auth-privacy {
+  margin: -2px 0 2px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.auth-privacy a {
+  color: var(--forest);
+  font-weight: 700;
+}
+
 .auth-form label {
   display: grid;
   gap: 6px;
@@ -782,7 +794,7 @@ body.account-open .account-panel {
 
 .profile-tabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 5px;
   min-width: 0;
   padding: 5px;
@@ -792,7 +804,7 @@ body.account-open .account-panel {
 }
 
 .profile-tabs:has(#profileAdminTab:not([hidden])) {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .profile-tab {
@@ -809,6 +821,15 @@ body.account-open .account-panel {
   background: white;
   color: var(--forest);
   box-shadow: 0 8px 18px rgba(10, 28, 27, 0.08);
+}
+
+.profile-tab.plus-tab {
+  color: #7d4e00;
+}
+
+.profile-tab.plus-tab.active {
+  background: #fff1b7;
+  color: #543300;
 }
 
 .profile-view[hidden] {
@@ -1137,6 +1158,146 @@ body.account-open .account-panel {
   font: inherit;
   font-size: 0.95rem;
   text-transform: none;
+}
+
+.plus-card {
+  gap: 14px;
+  overflow: hidden;
+  border-color: rgba(217, 154, 43, 0.36);
+  background:
+    radial-gradient(circle at 96% 0, rgba(255, 211, 91, 0.25), transparent 42%),
+    linear-gradient(145deg, #fffdf6, #fff8df);
+}
+
+.plus-card-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: start;
+}
+
+.plus-card-head h3 {
+  max-width: 260px;
+  margin: 6px 0 0;
+  color: var(--ink);
+  font-size: 1.12rem;
+  line-height: 1.12;
+}
+
+.plus-kicker {
+  color: #8b5804;
+  font-size: 0.7rem;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.plus-price {
+  color: #5f3a00;
+  font-size: 1.15rem;
+  line-height: 1;
+  text-align: right;
+}
+
+.plus-price small {
+  display: block;
+  margin-top: 5px;
+  color: #8a7047;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.plus-benefits {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plus-benefits li {
+  position: relative;
+  padding-left: 24px;
+  color: #574b36;
+  font-size: 0.84rem;
+  font-weight: 760;
+  line-height: 1.35;
+}
+
+.plus-benefits li::before {
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: var(--green);
+  content: "✓";
+  font-weight: 950;
+}
+
+.plus-status {
+  min-height: 36px;
+  margin: 0;
+  padding: 10px 11px;
+  border: 1px solid rgba(217, 154, 43, 0.25);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.7);
+  color: #63563f;
+  font-size: 0.8rem;
+  font-weight: 780;
+  line-height: 1.35;
+}
+
+.plus-consent {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 9px;
+  align-items: start;
+  color: #63563f;
+  font-size: 0.76rem;
+  font-weight: 720;
+  line-height: 1.35;
+}
+
+.plus-consent input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--forest);
+}
+
+.plus-consent a,
+.plus-legal a {
+  color: var(--forest);
+  font-weight: 850;
+}
+
+.plus-buy-button {
+  width: 100%;
+  border: 1px solid rgba(92, 55, 0, 0.16);
+  background: #ffc94d;
+  color: #3c2600;
+  box-shadow: 0 15px 28px rgba(176, 109, 0, 0.18);
+}
+
+.plus-buy-button:disabled {
+  opacity: 0.78;
+  cursor: default;
+}
+
+.plus-reset-button {
+  width: 100%;
+  min-height: 40px;
+  border-color: rgba(95, 58, 0, 0.2);
+  background: rgba(255, 255, 255, 0.64);
+  color: #6e5732;
+  font-size: 0.76rem;
+}
+
+.plus-legal {
+  margin: -3px 0 0;
+  color: #806f52;
+  font-size: 0.7rem;
+  line-height: 1.35;
+  text-align: center;
 }
 
 #translationPreferenceStatus {

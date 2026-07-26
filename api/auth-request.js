@@ -7,6 +7,7 @@ const {
   sendJson,
   sendLoginCode,
 } = require("../lib/user-store");
+const { enforceAuthRequestLimit } = require("../lib/request-limits");
 
 module.exports = async function handler(req, res) {
   if (req.method !== "POST") return sendJson(res, 405, { error: "Metodo non supportato." });
@@ -16,6 +17,7 @@ module.exports = async function handler(req, res) {
     const email = normalizeEmail(body.email);
     if (!isValidEmail(email)) return sendJson(res, 400, { error: "Email non valida." });
 
+    await enforceAuthRequestLimit(req, email);
     const { code } = await createLoginCode(email);
     await sendLoginCode(email, code);
 

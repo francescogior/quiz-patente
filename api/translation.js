@@ -2,6 +2,8 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const { authenticateRequest, publicError, readJson, sendJson } = require("../lib/user-store");
+const { requirePlusAccess } = require("../lib/plus-access");
+const { consumePlusGeneration } = require("../lib/plus-usage");
 
 const PROMPT_VERSION = "quiz-patente-translation-v1";
 const BUCKET = "question-translations";
@@ -13,15 +15,19 @@ let bucketReady = false;
 module.exports = async function handler(req, res) {
   if (req.method !== "POST") return sendJson(res, 405, { error: "Metodo non supportato." });
 
+  let generationClaim;
   try {
-    await authenticateRequest(req);
+    const { user } = await authenticateRequest(req);
     const body = await readJson(req);
     const questionId = Number(body.questionId);
     const question = getQuestion(questionId);
     if (!question) return sendJson(res, 404, { error: "Domanda non trovata." });
 
     const language = normalizeLanguage(body.language);
-    const explanation = String(body.explanation || "").trim().slice(0, 1400);
+    const explanation = String(body.explanation || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 700);
 
     if (language.code === ORIGINAL_LANGUAGE) {
       return sendJson(res, 200, {
@@ -43,6 +49,8 @@ module.exports = async function handler(req, res) {
       return sendJson(res, 200, { source: "cache", translation: cached });
     }
 
+    requirePlusAccess(req, user);
+    generationClaim = await consumePlusGeneration(user, "translation", cachePath);
     const generated = await generateTranslation(question, language, explanation);
     const translation = {
       questionId: question.id,
@@ -58,6 +66,11 @@ module.exports = async function handler(req, res) {
     await saveCachedTranslation(cachePath, translation);
     return sendJson(res, 200, { source: "generated", translation });
   } catch (error) {
+    await generationClaim?.release().catch((releaseError) => {
+      console.error("Translation generation lock release failed", {
+        message: releaseError.message,
+      });
+    });
     const response = publicError(error, "Traduzione non disponibile ora.");
     return sendJson(res, response.statusCode, response.payload);
   }
@@ -79,22 +92,36 @@ function getQuestion(id) {
 
 function normalizeLanguage(value) {
   const raw = typeof value === "object" && value ? value : {};
-  const code = String(raw.code || "").trim().slice(0, 32);
-  const label = String(raw.label || "").trim().slice(0, 80);
-  const isCustom = Boolean(raw.custom);
+  const code = String(raw.code || "").trim();
+  const label = String(raw.label || "").replace(/\s+/g, " ").trim().slice(0, 80);
+  const presets = new Map([
+    ["en", "Inglese"],
+    ["ru", "Russo"],
+    ["hy", "Armeno"],
+    ["fa", "Persiano"],
+    ["zh-Hans", "Cinese semplificato"],
+    ["tr", "Turco"],
+  ]);
 
   if (!code || code === ORIGINAL_LANGUAGE) {
     return { code: ORIGINAL_LANGUAGE, label: "Italiano originale", custom: false };
   }
 
-  if (!label) {
+  if (presets.has(code)) {
+    return { code, label: presets.get(code), custom: false };
+  }
+
+  if (
+    code !== "custom" ||
+    !/^[\p{L}\p{M}][\p{L}\p{M}\p{N}\s(),.'’/-]{1,79}$/u.test(label)
+  ) {
     const error = new Error("Lingua mancante.");
     error.publicMessage = "Seleziona una lingua valida.";
     error.statusCode = 400;
     throw error;
   }
 
-  return { code, label, custom: isCustom };
+  return { code: "custom", label, custom: true };
 }
 
 function buildCachePath(question, language, explanation) {
@@ -123,7 +150,7 @@ function hashText(value) {
 async function findCachedTranslation(cachePath) {
   try {
     await ensureBucket();
-    const response = await fetch(storageObjectUrl(cachePath), {
+    const response = await fetch(storageReadUrl(cachePath), {
       headers: supabaseHeaders(),
     });
     if (response.status === 404) return null;
@@ -150,6 +177,9 @@ async function saveCachedTranslation(cachePath, translation) {
     if (!response.ok) throw new Error(await response.text());
   } catch (error) {
     console.error("Translation cache write failed", { message: error.message });
+    error.publicMessage = "Non riesco a salvare la nuova traduzione. Riprova tra poco.";
+    error.statusCode = 503;
+    throw error;
   }
 }
 
@@ -188,6 +218,11 @@ async function ensureBucket() {
 function storageObjectUrl(cachePath) {
   const encodedPath = cachePath.split("/").map(encodeURIComponent).join("/");
   return `${supabaseUrl()}/storage/v1/object/${BUCKET}/${encodedPath}`;
+}
+
+function storageReadUrl(cachePath) {
+  const encodedPath = cachePath.split("/").map(encodeURIComponent).join("/");
+  return `${supabaseUrl()}/storage/v1/object/authenticated/${BUCKET}/${encodedPath}`;
 }
 
 async function generateTranslation(question, language, explanation) {

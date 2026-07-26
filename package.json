@@ -1,0 +1,10 @@
+{
+  "name": "quiz-patente-ab",
+  "private": true,
+  "version": "1.0.0",
+  "type": "commonjs",
+  "scripts": {
+    "test": "node --test tests/*.test.cjs",
+    "check": "node --check app.js && node --check lib/*.js && node --check api/*.js"
+  }
+}

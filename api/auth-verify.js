@@ -8,6 +8,7 @@ const {
   verifyLoginCode,
   withAdminFlag,
 } = require("../lib/user-store");
+const { enforceAuthVerifyLimit } = require("../lib/request-limits");
 
 module.exports = async function handler(req, res) {
   if (req.method !== "POST") return sendJson(res, 405, { error: "Metodo non supportato." });
@@ -15,11 +16,12 @@ module.exports = async function handler(req, res) {
   try {
     const body = await readJson(req);
     const email = normalizeEmail(body.email);
-    const code = String(body.code || "").replace(/\D/g, "");
+    const code = String(body.code || "").slice(0, 32).replace(/\D/g, "");
     if (!isValidEmail(email) || code.length !== 6) {
       return sendJson(res, 400, { error: "Email o codice non validi." });
     }
 
+    await enforceAuthVerifyLimit(req, email);
     const { token, user } = await verifyLoginCode(email, code);
     const progress = await getProgress(user.id);
 

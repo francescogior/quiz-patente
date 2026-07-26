@@ -13,7 +13,7 @@ module.exports = async function handler(req, res) {
   try {
     const { user } = await authenticateRequest(req);
     const body = await readJson(req);
-    await saveExamResult(user.id, body);
+    await saveExamResult(user, body);
     const progress = await getProgress(user.id);
     return sendJson(res, 200, { ok: true, progress });
   } catch (error) {

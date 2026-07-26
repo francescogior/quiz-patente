@@ -175,6 +175,10 @@
           </label>
           <button class="primary-button" id="requestCodeButton" type="submit">Invia codice</button>
         </form>
+        <p class="auth-privacy">
+          Usiamo la tua email per l’accesso e la sicurezza dell’account.
+          <a href="privacy.html" target="_blank" rel="noopener">Leggi l’informativa privacy</a>.
+        </p>
         <form class="auth-form" id="codeLoginForm" hidden>
           <label>
             <span>Codice</span>
@@ -206,6 +210,7 @@
           <button class="profile-tab active" data-profile-tab="summary" type="button">Riepilogo</button>
           <button class="profile-tab" data-profile-tab="tests" type="button">Test</button>
           <button class="profile-tab" data-profile-tab="translations" type="button">Traduzioni</button>
+          <button class="profile-tab plus-tab" data-profile-tab="plus" type="button">Plus</button>
           <button class="profile-tab" data-profile-tab="admin" id="profileAdminTab" type="button" hidden>
             Admin
           </button>
@@ -269,6 +274,46 @@
           </label>
           <p id="translationPreferenceStatus"></p>
         </section>
+
+        <section class="profile-view profile-section plus-card" data-profile-view="plus" hidden>
+          <div class="plus-card-head">
+            <div>
+              <span class="plus-kicker">Quiz Patente Plus</span>
+              <h3>Spiegazioni nuove, quando ti servono</h3>
+            </div>
+            <strong class="plus-price">€3,99 <small>/ 30 giorni</small></strong>
+          </div>
+          <ul class="plus-benefits">
+            <li>Genera spiegazioni AI per domande non ancora coperte.</li>
+            <li>Traduci domande e spiegazioni in tutte le lingue disponibili.</li>
+            <li>Una sola spesa, nessun rinnovo automatico.</li>
+          </ul>
+          <p class="plus-status" id="plusStatus" aria-live="polite">
+            Le simulazioni ufficiali, lo storico e i contenuti già disponibili restano gratuiti.
+          </p>
+          <label class="plus-consent" id="plusConsentRow">
+            <input id="plusConsent" type="checkbox" />
+            <span>
+              Chiedo che il pass digitale inizi subito, accetto
+              <a href="terms.html" target="_blank" rel="noopener">i termini</a>
+              e riconosco che, dopo l’inizio dell’erogazione, posso perdere l’eventuale
+              diritto di recesso. Restano salvi i diritti inderogabili.
+            </span>
+          </label>
+          <button class="primary-button plus-buy-button" id="plusBuyButton" type="button">
+            Attiva Plus — €3,99
+          </button>
+          <button class="ghost-button plus-reset-button" id="plusResetButton" type="button" hidden>
+            Verifica e scarta il tentativo non pagato
+          </button>
+          <p class="plus-legal">
+            Il pass scade dopo 30 giorni e non si rinnova.
+            <a href="refunds.html" target="_blank" rel="noopener">Rimborsi</a>
+            ·
+            <a href="privacy.html" target="_blank" rel="noopener">Privacy</a>
+          </p>
+        </section>
+
         <section class="profile-view admin-card" id="adminPanel" data-profile-view="admin" hidden>
           <div class="admin-head">
             <div>

@@ -1,11 +1,15 @@
 importScripts("./data/asset-manifest-sw.js");
 
-const CACHE_NAME = "quiz-patente-ab-v24";
+const CACHE_NAME = "quiz-patente-ab-v27";
 const CORE_ASSETS = [
   "./",
   "./index.html",
   "./styles.css",
   "./app.js",
+  "./legal.css",
+  "./terms.html",
+  "./refunds.html",
+  "./privacy.html",
   "./manifest.webmanifest",
   "./data/questions.js",
   "./assets/icons/icon-192.png",
@@ -37,6 +41,14 @@ self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;
   const url = new URL(request.url);
+
+  if (
+    url.origin === self.location.origin &&
+    (url.searchParams.has("checkout") || url.searchParams.has("session_id"))
+  ) {
+    event.respondWith(fetch(request, { cache: "no-store" }));
+    return;
+  }
 
   if (url.origin === self.location.origin && url.pathname.startsWith("/_vercel/insights/")) {
     event.respondWith(fetch(request));
