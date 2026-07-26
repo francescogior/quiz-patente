@@ -29,7 +29,7 @@ test("account UI discloses the duration, consent, and legal pages", () => {
 
 test("service worker revision includes the legal pages", () => {
   const worker = read("service-worker.js");
-  assert.match(worker, /quiz-patente-ab-v28/);
+  assert.match(worker, /quiz-patente-ab-v29/);
   assert.match(worker, /\.\/terms\.html/);
   assert.match(worker, /\.\/refunds\.html/);
   assert.match(worker, /\.\/privacy\.html/);
@@ -40,13 +40,20 @@ test("checkout recovery is persisted and callback URLs bypass CacheStorage", () 
   const worker = read("service-worker.js");
   const reset = read("api/plus-checkout-reset.js");
   assert.match(app, /PLUS_PENDING_SESSION_KEY/);
+  assert.match(app, /PLUS_PENDING_CHECKOUT_URL_KEY/);
   assert.match(app, /localStorage\.setItem\(PLUS_PENDING_SESSION_KEY, response\.sessionId\)/);
+  assert.match(app, /Riapri lo stesso checkout/);
+  const cancelledBranch = app.slice(
+    app.indexOf('checkoutState === "cancelled"'),
+    app.indexOf('checkoutState === "cancelled"') + 650,
+  );
+  assert.doesNotMatch(cancelledBranch, /clearPendingPlusCheckout/);
   assert.match(app, /checkoutUrl\.hostname !== "checkout\.stripe\.com"/);
   assert.match(app, /\.\/api\/plus-checkout-reset/);
   assert.match(reset, /payload\.sync\?\.ok === true/);
   assert.match(reset, /checkout\.status === "paid"/);
-  assert.match(reset, /checkout\.status === "open"/);
   assert.match(reset, /checkout\.status === "expired"/);
+  assert.doesNotMatch(reset, /checkout\.status === "open"/);
   assert.match(worker, /url\.searchParams\.has\("checkout"\)/);
   assert.match(worker, /url\.searchParams\.has\("session_id"\)/);
   assert.match(worker, /cache: "no-store"/);

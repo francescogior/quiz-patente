@@ -56,13 +56,12 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    const stripeConfirmedUnpaid =
-      payload.sync?.ok === true &&
-      (checkout.status === "open" || checkout.status === "expired");
-    if (!stripeConfirmedUnpaid) {
+    const stripeConfirmedExpired =
+      payload.sync?.ok === true && checkout.status === "expired";
+    if (!stripeConfirmedExpired) {
       return sendJson(res, 409, {
         error:
-          "Lo stato del pagamento non è ancora certo. Riprova l’attivazione o attendi qualche minuto.",
+          "La sessione può ancora essere pagata. Riapri lo stesso checkout o attendi che Stripe ne confermi la scadenza.",
       });
     }
 

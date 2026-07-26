@@ -7,6 +7,7 @@ const LANGUAGE_PREF_KEY = "quiz-patente-translation-language-v1";
 const PLUS_TOKEN_LEGACY_KEY = "quiz-patente-plus-token-v1";
 const PLUS_TOKENS_KEY = "quiz-patente-plus-tokens-v2";
 const PLUS_PENDING_SESSION_KEY = "quiz-patente-plus-pending-session-v1";
+const PLUS_PENDING_CHECKOUT_URL_KEY = "quiz-patente-plus-checkout-url-v1";
 const PLUS_CHECKOUT_URL = "https://proofkit.realb.it/api/checkout";
 const PLUS_PRODUCT = {
   experimentSlug: "quizpatente-plus",
@@ -123,6 +124,7 @@ let plusState = {
   message: "",
   recoverable: false,
   pendingSession: localStorage.getItem(PLUS_PENDING_SESSION_KEY),
+  pendingCheckoutUrl: storedStripeCheckoutUrl(),
 };
 let adminState = { data: null, view: "users", loading: false, error: "" };
 let profileView = "summary";
@@ -1321,6 +1323,19 @@ function removePlusTokenForUser(userId) {
   localStorage.removeItem(PLUS_TOKEN_LEGACY_KEY);
 }
 
+function storedStripeCheckoutUrl() {
+  try {
+    const value = localStorage.getItem(PLUS_PENDING_CHECKOUT_URL_KEY);
+    if (!value) return null;
+    const url = new URL(value);
+    return url.protocol === "https:" && url.hostname === "checkout.stripe.com"
+      ? url.toString()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 async function syncPlusAccessFromLocation() {
   if (!authState.user || !authState.token) return;
 
@@ -1360,7 +1375,13 @@ async function syncPlusAccessFromLocation() {
     setProfileView("plus");
     openAccountPanel();
   } else if (checkoutState === "cancelled") {
-    await clearPendingPlusCheckout({ cancelled: true });
+    plusState.message = plusState.pendingCheckoutUrl
+      ? "Checkout sospeso senza conferma di pagamento. Riapri la stessa sessione per continuare senza creare un secondo addebito."
+      : "Checkout sospeso. Conserviamo il riferimento finché Stripe non conferma il pagamento o la scadenza.";
+    plusState.recoverable = false;
+    setProfileView("plus");
+    openAccountPanel();
+    renderPlus();
   } else if (checkoutState === "success" || plusState.pendingSession) {
     await activatePlusCheckout(plusState.pendingSession);
   } else {
@@ -1438,9 +1459,11 @@ async function activatePlusCheckout(sessionId) {
     plusState.expiresAt = response.access?.expiresAt || null;
     plusState.recoverable = false;
     plusState.pendingSession = null;
+    plusState.pendingCheckoutUrl = null;
     plusState.message = "Pagamento confermato. Quiz Patente Plus è attivo.";
     storePlusTokenForUser(authState.user.id, response.token);
     localStorage.removeItem(PLUS_PENDING_SESSION_KEY);
+    localStorage.removeItem(PLUS_PENDING_CHECKOUT_URL_KEY);
     return true;
   } catch (error) {
     plusState.message = error.message || "Non riesco ad attivare Plus.";
@@ -1459,6 +1482,10 @@ async function startPlusCheckout() {
   }
   if (plusState.active) return;
   if (plusState.pendingSession) {
+    if (plusState.pendingCheckoutUrl) {
+      window.location.assign(plusState.pendingCheckoutUrl);
+      return;
+    }
     await activatePlusCheckout(plusState.pendingSession);
     return;
   }
@@ -1495,7 +1522,12 @@ async function startPlusCheckout() {
       throw new Error("Link di pagamento non valido.");
     }
     plusState.pendingSession = response.sessionId;
+    plusState.pendingCheckoutUrl = checkoutUrl.toString();
     localStorage.setItem(PLUS_PENDING_SESSION_KEY, response.sessionId);
+    localStorage.setItem(
+      PLUS_PENDING_CHECKOUT_URL_KEY,
+      plusState.pendingCheckoutUrl,
+    );
     window.location.assign(checkoutUrl.toString());
   } catch (error) {
     plusState.loading = false;
@@ -1504,7 +1536,7 @@ async function startPlusCheckout() {
   }
 }
 
-async function clearPendingPlusCheckout(options = {}) {
+async function clearPendingPlusCheckout() {
   const sessionId = plusState.pendingSession;
   if (!sessionId) return;
 
@@ -1521,11 +1553,12 @@ async function clearPendingPlusCheckout(options = {}) {
       throw new Error("Questo pagamento non può essere scartato.");
     }
     plusState.pendingSession = null;
+    plusState.pendingCheckoutUrl = null;
     plusState.recoverable = false;
-    plusState.message = options.cancelled
-      ? "Pagamento annullato: Stripe conferma che non è stato addebitato nulla."
-      : "Stripe conferma che il tentativo non è stato pagato. Puoi ricominciare.";
+    plusState.message =
+      "Stripe conferma che la sessione è scaduta. Puoi iniziare un nuovo pagamento.";
     localStorage.removeItem(PLUS_PENDING_SESSION_KEY);
+    localStorage.removeItem(PLUS_PENDING_CHECKOUT_URL_KEY);
   } catch (error) {
     plusState.message =
       error.message ||
@@ -1561,7 +1594,9 @@ function renderPlus() {
     els.plusBuyButton.textContent = plusState.loading
       ? "Attendo..."
       : plusState.pendingSession
-        ? "Riprova l’attivazione"
+        ? plusState.pendingCheckoutUrl
+          ? "Riapri lo stesso checkout"
+          : "Riprova l’attivazione"
         : plusState.recoverable
           ? "Riprova la verifica"
           : "Attiva Plus — €3,99";
