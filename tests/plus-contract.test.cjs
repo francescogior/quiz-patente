@@ -20,6 +20,7 @@ test("account UI discloses the duration, consent, and legal pages", () => {
   assert.match(html, /id="plusConsent"/);
   assert.match(html, /€3,99/);
   assert.match(html, /30 giorni/);
+  assert.match(html, /rel="icon"[^>]+assets\/icons\/icon-192\.png/);
   for (const file of ["terms.html", "refunds.html", "privacy.html"]) {
     assert.equal(fs.existsSync(path.join(root, file)), true);
     assert.match(html, new RegExp(file.replace(".", "\\.")));
@@ -28,7 +29,7 @@ test("account UI discloses the duration, consent, and legal pages", () => {
 
 test("service worker revision includes the legal pages", () => {
   const worker = read("service-worker.js");
-  assert.match(worker, /quiz-patente-ab-v27/);
+  assert.match(worker, /quiz-patente-ab-v28/);
   assert.match(worker, /\.\/terms\.html/);
   assert.match(worker, /\.\/refunds\.html/);
   assert.match(worker, /\.\/privacy\.html/);
