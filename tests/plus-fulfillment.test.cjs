@@ -40,7 +40,7 @@ test("a refund tombstone prevents a later browser activation", async () => {
   });
   const restoreEntitlements = installStub("lib/plus-entitlements.js", {
     claimEntitlementEmail: async () => null,
-    loadPlusEntitlement: async () => null,
+    loadPaidPlusEntitlement: async () => null,
     markEntitlementEmailed: async () => {},
     releaseEntitlementEmailClaim: async () => {},
     revokePlusEntitlement: async () => {},
@@ -112,7 +112,7 @@ test("concurrent fulfillment sends one idempotent activation email", async () =>
       emailClaims += 1;
       return emailClaims === 1 ? "email-claim-1" : null;
     },
-    loadPlusEntitlement: async () => ({
+    loadPaidPlusEntitlement: async () => ({
       active: true,
       checkoutId: "cs_test_fulfillment123456",
     }),
@@ -219,7 +219,7 @@ test("a won dispute restores access unless the payment was also refunded", async
   });
   const restoreEntitlements = installStub("lib/plus-entitlements.js", {
     claimEntitlementEmail: async () => null,
-    loadPlusEntitlement: async () => null,
+    loadPaidPlusEntitlement: async () => null,
     markEntitlementEmailed: async () => {},
     releaseEntitlementEmailClaim: async () => {},
     revokePlusEntitlement: async () => {},

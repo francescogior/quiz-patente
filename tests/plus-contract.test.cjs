@@ -41,7 +41,7 @@ test("account UI discloses the duration, consent, and legal pages", () => {
 
 test("service worker revision includes the legal pages", () => {
   const worker = read("service-worker.js");
-  assert.match(worker, /quiz-patente-ab-v31/);
+  assert.match(worker, /quiz-patente-ab-v32/);
   assert.match(worker, /\.\/terms\.html/);
   assert.match(worker, /\.\/refunds\.html/);
   assert.match(worker, /\.\/privacy\.html/);
@@ -74,7 +74,7 @@ test("checkout recovery is persisted and callback URLs bypass CacheStorage", () 
   assert.match(worker, /cache: "no-store"/);
 });
 
-test("activation verifies Stripe directly and binds pass duration to charge paidAt", () => {
+test("activation verifies Stripe directly and binds pass duration to durable dates", () => {
   const activation = read("api/plus-activate.js");
   const access = read("lib/plus-access.js");
   const stripe = read("lib/stripe-checkout.js");
@@ -82,7 +82,8 @@ test("activation verifies Stripe directly and binds pass duration to charge paid
   assert.match(activation, /validatePlusCheckoutSession/);
   assert.match(stripe, /payment_intent\.latest_charge/);
   assert.match(stripe, /customerEmailSha256/);
-  assert.match(access, /paidAtSeconds \+ ACCESS_DAYS/);
+  assert.match(access, /paidAtMs \+ ACCESS_DAYS/);
+  assert.match(access, /Math\.floor\(expiresAtMs \/ 1000\)/);
 });
 
 test("signed Stripe webhook fulfills Plus without a browser return", () => {

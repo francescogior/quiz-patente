@@ -6,6 +6,7 @@ const {
 const { loadPlusEntitlement } = require("../lib/plus-entitlements");
 
 module.exports = async function handler(req, res) {
+  res.setHeader("Cache-Control", "private, no-store");
   if (req.method !== "GET") return sendJson(res, 405, { error: "Metodo non supportato." });
 
   try {
@@ -18,6 +19,8 @@ module.exports = async function handler(req, res) {
         user,
         checkoutId: entitlement.checkoutId,
         paidAt: entitlement.paidAt,
+        expiresAt: entitlement.expiresAt,
+        source: entitlement.source,
       });
       access = verifyPlusToken(token, user);
     }

@@ -130,6 +130,7 @@ const els = {
   adminUsersTotal: document.getElementById("adminUsersTotal"),
   adminTestsTotal: document.getElementById("adminTestsTotal"),
   adminPassedTotal: document.getElementById("adminPassedTotal"),
+  adminPlusTotal: document.getElementById("adminPlusTotal"),
   adminAvgErrors: document.getElementById("adminAvgErrors"),
   adminTabs: document.getElementById("adminTabs"),
   adminContent: document.getElementById("adminContent"),
@@ -152,7 +153,7 @@ let plusState = {
   pendingSession: localStorage.getItem(PLUS_PENDING_SESSION_KEY),
   pendingCheckoutUrl: storedStripeCheckoutUrl(),
 };
-let adminState = { data: null, view: "users", loading: false, error: "" };
+let adminState = createAdminState();
 let profileView = "summary";
 let translationState = { language: restoreLanguagePreference() };
 let timerId = 0;
@@ -163,6 +164,17 @@ let customLanguageTimer = 0;
 let authIntent = "default";
 let accessEpoch = 0;
 let accountReturnFocus = null;
+
+function createAdminState() {
+  return {
+    data: null,
+    view: "users",
+    loading: false,
+    error: "",
+    grantingUserId: null,
+    feedbackByUser: {},
+  };
+}
 
 init();
 
@@ -196,6 +208,13 @@ function init() {
     const tab = event.target.closest("[data-profile-tab]");
     if (!tab || tab.hidden) return;
     setProfileView(tab.dataset.profileTab);
+    if (
+      tab.dataset.profileTab === "plus" &&
+      authState.user &&
+      !plusState.loading
+    ) {
+      refreshPlusAccess({ persistOnSuccess: true, removeInvalid: true });
+    }
   });
   els.questionLanguageSelect.addEventListener(
     "change",
@@ -219,6 +238,11 @@ function init() {
     if (!tab) return;
     adminState.view = tab.dataset.adminView;
     renderAdmin();
+  });
+  els.adminContent.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-admin-plus-grant]");
+    if (!button) return;
+    grantAdminPlus(button.dataset.adminPlusGrant);
   });
   window.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
@@ -1396,7 +1420,7 @@ async function initAuth() {
     if (error.stale || !isCurrentAuthContext(requestContext)) return;
     localStorage.removeItem(AUTH_TOKEN_KEY);
     authState = { token: null, user: null, progress: null, restoring: false };
-    adminState = { data: null, view: "users", loading: false, error: "" };
+    adminState = createAdminState();
     clearPremiumContentCaches();
     renderAuth();
     render();
@@ -1454,7 +1478,10 @@ function trapAccountFocus(event) {
   if (focusable.length === 0) return;
   const first = focusable[0];
   const last = focusable[focusable.length - 1];
-  if (event.shiftKey && document.activeElement === first) {
+  if (document.activeElement?.classList.contains("admin-plus-feedback")) {
+    event.preventDefault();
+    (event.shiftKey ? last : first).focus();
+  } else if (event.shiftKey && document.activeElement === first) {
     event.preventDefault();
     last.focus();
   } else if (!event.shiftKey && document.activeElement === last) {
@@ -1478,6 +1505,9 @@ function openPlusPanel() {
   authIntent = "default";
   setProfileView("plus");
   openAccountPanel();
+  if (!plusState.loading) {
+    refreshPlusAccess({ persistOnSuccess: true, removeInvalid: true });
+  }
 }
 
 function renderAccountPanelCopy() {
@@ -1553,7 +1583,7 @@ async function verifyLoginCode(event) {
     authState.progress = response.progress;
     authState.restoring = false;
     plusState.token = storedPlusTokenForUser(response.user.id);
-    adminState = { data: null, view: "users", loading: false, error: "" };
+    adminState = createAdminState();
     localStorage.setItem(AUTH_TOKEN_KEY, response.token);
     els.loginCode.value = "";
     setAuthStatus("");
@@ -1599,7 +1629,7 @@ function resetToAnonymousDemo() {
     pendingSession: null,
     pendingCheckoutUrl: null,
   };
-  adminState = { data: null, view: "users", loading: false, error: "" };
+  adminState = createAdminState();
   if (previousUserId) removePlusTokenForUser(previousUserId);
   localStorage.removeItem(AUTH_TOKEN_KEY);
   localStorage.removeItem(DEMO_STORAGE_KEY);
@@ -1931,6 +1961,8 @@ async function activatePlusCheckout(sessionId) {
     renderPlus();
     return false;
   }
+  // Fence older status refreshes before this mutation owns the Plus state.
+  clearPremiumContentCaches();
   const requestContext = captureAccessContext();
   plusState.loading = true;
   plusState.pendingSession = sessionId;
@@ -2002,6 +2034,8 @@ async function startPlusCheckout() {
     return;
   }
 
+  // Fence older status refreshes before this mutation owns the Plus state.
+  clearPremiumContentCaches();
   const requestContext = captureAccessContext();
   plusState.loading = true;
   plusState.message = "Apro il pagamento sicuro...";
@@ -2044,6 +2078,21 @@ async function startPlusCheckout() {
       }
       return;
     }
+    if (error.status === 409) {
+      const refreshed = await refreshPlusAccess({
+        persistOnSuccess: true,
+        removeInvalid: true,
+      });
+      if (!isCurrentAuthContext(requestContext)) return;
+      if (refreshed.active) {
+        plusState.loading = false;
+        plusState.message =
+          "Quiz Patente Plus era già stato attivato sul tuo account.";
+        localStorage.removeItem(PLUS_CHECKOUT_ATTEMPT_KEY);
+        renderPlus();
+        return;
+      }
+    }
     plusState.loading = false;
     plusState.message = error.message || "Pagamento non disponibile ora.";
     renderPlus();
@@ -2053,6 +2102,8 @@ async function startPlusCheckout() {
 async function clearPendingPlusCheckout() {
   const sessionId = plusState.pendingSession;
   if (!sessionId) return;
+  // Fence older status refreshes before this mutation owns the Plus state.
+  clearPremiumContentCaches();
   const requestContext = captureAccessContext();
 
   plusState.loading = true;
@@ -2398,7 +2449,11 @@ function parseDateMs(value, fallback) {
 
 async function loadAdminDashboard(force = false) {
   if (!authState.token || !authState.user?.isAdmin) return;
-  if (adminState.loading || (adminState.data && !force)) {
+  if (
+    adminState.loading ||
+    adminState.grantingUserId ||
+    (adminState.data && !force)
+  ) {
     renderAdmin();
     return;
   }
@@ -2422,6 +2477,109 @@ async function loadAdminDashboard(force = false) {
   }
 }
 
+async function grantAdminPlus(userId) {
+  if (
+    !authState.token ||
+    !authState.user?.isAdmin ||
+    adminState.loading ||
+    adminState.grantingUserId
+  ) {
+    return;
+  }
+  const user = adminState.data?.users?.find(
+    (candidate) => String(candidate.id) === String(userId),
+  );
+  if (!user || user.plus?.active) return;
+  if (
+    !window.confirm(
+      `Attivare Quiz Patente Plus per ${user.email} per 30 giorni?`,
+    )
+  ) {
+    return;
+  }
+
+  const requestContext = captureAuthContext();
+  adminState.grantingUserId = String(user.id);
+  adminState.feedbackByUser[user.id] = {
+    type: "pending",
+    message: "Attivazione Plus in corso…",
+  };
+  renderAdmin();
+  focusAdminGrantFeedback(user.id);
+
+  try {
+    const response = await authFetch("./api/admin-plus-grant", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: String(user.id),
+        requestId: createAdminGrantRequestId(),
+      }),
+    });
+    if (!isCurrentAuthContext(requestContext)) return;
+    const access = response.grant?.access;
+    if (!access?.active || !access.expiresAt) {
+      throw new Error("Stato Plus restituito dal server non valido.");
+    }
+    const currentUser = adminState.data?.users?.find(
+      (candidate) => String(candidate.id) === String(user.id),
+    );
+    if (currentUser) currentUser.plus = access;
+    if (adminState.data?.summary) {
+      adminState.data.summary.plusUsers = adminState.data.users.filter(
+        (candidate) => candidate.plus?.active,
+      ).length;
+    }
+    adminState.feedbackByUser[user.id] = {
+      type: "success",
+      message:
+        response.grant?.reason === "already_active"
+          ? `Plus era già attivo fino al ${formatDate(access.expiresAt)}.`
+          : `Plus attivo fino al ${formatDate(access.expiresAt)}.`,
+    };
+    if (
+      access?.active &&
+      String(user.id) === String(authState.user?.id) &&
+      !plusState.loading &&
+      isCurrentAuthContext(requestContext)
+    ) {
+      await refreshPlusAccess({
+        persistOnSuccess: true,
+        removeInvalid: true,
+      });
+    }
+  } catch (error) {
+    if (error.stale || !isCurrentAuthContext(requestContext)) return;
+    adminState.feedbackByUser[user.id] = {
+      type: "error",
+      message: error.message || "Attivazione Plus non riuscita.",
+    };
+  } finally {
+    if (isCurrentAuthContext(requestContext)) {
+      adminState.grantingUserId = null;
+      renderAdmin();
+      focusAdminGrantFeedback(user.id);
+    }
+  }
+}
+
+function focusAdminGrantFeedback(userId) {
+  const feedback = document.getElementById(`admin-plus-feedback-${userId}`);
+  if (feedback?.textContent) feedback.focus({ preventScroll: true });
+}
+
+function createAdminGrantRequestId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  const bytes = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(bytes);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = [...bytes].map((value) => value.toString(16).padStart(2, "0"));
+  return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex
+    .slice(6, 8)
+    .join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10).join("")}`;
+}
+
 function renderAdmin() {
   const isAdmin = Boolean(authState.user?.isAdmin);
   els.adminPanel.hidden = !isAdmin || profileView !== "admin";
@@ -2434,13 +2592,16 @@ function renderAdmin() {
     users: 0,
     tests: 0,
     passedTests: 0,
+    plusUsers: 0,
     averageErrors: 0,
   };
   els.adminUsersTotal.textContent = String(summary.users || 0);
   els.adminTestsTotal.textContent = String(summary.tests || 0);
   els.adminPassedTotal.textContent = String(summary.passedTests || 0);
+  els.adminPlusTotal.textContent = String(summary.plusUsers || 0);
   els.adminAvgErrors.textContent = formatAverage(summary.averageErrors || 0);
-  els.refreshAdminButton.disabled = adminState.loading;
+  els.refreshAdminButton.disabled =
+    adminState.loading || Boolean(adminState.grantingUserId);
 
   els.adminTabs.querySelectorAll("[data-admin-view]").forEach((tab) => {
     tab.classList.toggle("active", tab.dataset.adminView === adminState.view);
@@ -2526,10 +2687,84 @@ function renderAdminUsers(users = []) {
         : "nessun test",
     ].join(" · ");
 
-    item.append(header, stats, detail);
+    const plus = user.plus || {
+      active: false,
+      expiresAt: null,
+      source: null,
+      revokedAt: null,
+      revocationReason: null,
+    };
+    const plusRow = document.createElement("div");
+    plusRow.className = "admin-user-plus";
+
+    const plusStatus = document.createElement("div");
+    plusStatus.className = "admin-plus-status";
+    const plusBadge = document.createElement("strong");
+    plusBadge.className = plus.active
+      ? "admin-plus-badge active"
+      : "admin-plus-badge";
+    plusBadge.textContent = plus.active ? "Plus attivo" : "Free";
+    const plusDetail = document.createElement("span");
+    plusDetail.textContent = plus.active
+      ? `Scade ${formatDate(plus.expiresAt)} · ${
+          plus.source === "manual_admin" ? "assegnato dall’admin" : "pagamento"
+        }`
+      : plus.revokedAt
+        ? `Revocato ${formatDate(plus.revokedAt)} · ${adminRevocationLabel(
+            plus.revocationReason,
+          )}`
+        : plus.expiresAt
+          ? `Ultimo accesso scaduto ${formatDate(plus.expiresAt)}`
+          : "Nessun accesso Plus";
+    plusStatus.append(plusBadge, plusDetail);
+
+    const grantButton = document.createElement("button");
+    grantButton.className = "primary-button admin-plus-grant";
+    grantButton.type = "button";
+    grantButton.dataset.adminPlusGrant = String(user.id);
+    const granting = adminState.grantingUserId === String(user.id);
+    grantButton.disabled =
+      plus.active ||
+      adminState.loading ||
+      Boolean(adminState.grantingUserId);
+    grantButton.textContent = plus.active
+      ? "Plus attivo"
+      : granting
+        ? "Attivo…"
+        : "Attiva Plus · 30 giorni";
+    grantButton.setAttribute(
+      "aria-label",
+      plus.active
+        ? `Plus già attivo per ${user.email}`
+        : `Attiva Plus per ${user.email} per 30 giorni`,
+    );
+    grantButton.setAttribute(
+      "aria-describedby",
+      `admin-plus-feedback-${user.id}`,
+    );
+    plusRow.append(plusStatus, grantButton);
+
+    const feedbackState = adminState.feedbackByUser[user.id];
+    const feedback = document.createElement("p");
+    feedback.id = `admin-plus-feedback-${user.id}`;
+    feedback.className = `admin-plus-feedback${
+      feedbackState ? ` ${feedbackState.type}` : ""
+    }`;
+    feedback.setAttribute("role", "status");
+    feedback.setAttribute("aria-live", "polite");
+    if (feedbackState) feedback.tabIndex = -1;
+    feedback.textContent = feedbackState?.message || "";
+
+    item.append(header, stats, plusRow, detail, feedback);
     list.append(item);
   });
   els.adminContent.append(list);
+}
+
+function adminRevocationLabel(reason) {
+  if (reason === "charge.refunded") return "rimborso";
+  if (reason === "charge.dispute.created") return "contestazione";
+  return "pagamento revocato";
 }
 
 function renderAdminActivity(activity = []) {

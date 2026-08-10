@@ -63,6 +63,11 @@ automaticamente se Stripe la chiude a favore del cliente. Il checkout accetta so
 pagamenti con carta, così i 30 giorni partono dal pagamento verificato senza
 metodi differiti.
 
+Gli amministratori possono anche assegnare un pass Plus di 30 giorni dalla
+scheda Utenti del pannello Admin. Questi grant sono registrati separatamente
+dagli acquisti Stripe: un rimborso o una contestazione modifica soltanto il pass
+collegato al relativo pagamento e non revoca un accesso concesso manualmente.
+
 ## Avvio locale
 
 ```bash

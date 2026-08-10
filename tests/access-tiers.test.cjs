@@ -159,3 +159,39 @@ test("the published copy describes the new Free and Plus boundary", () => {
     /Spiegazioni e traduzioni sono disponibili con Quiz Patente Plus/,
   );
 });
+
+test("admins can grant a separate fixed 30-day Plus pass", () => {
+  const app = read("app.js");
+  const html = read("index.html");
+  const route = read("api/admin-plus-grant.js");
+  const grants = read("lib/plus-admin-grants.js");
+  const fulfillment = read("lib/plus-fulfillment.js");
+
+  assert.match(app, /\.\/api\/admin-plus-grant/);
+  assert.match(app, /Attiva Plus · 30 giorni/);
+  assert.match(app, /window\.confirm/);
+  assert.match(html, /id="adminPlusTotal"/);
+  assert.match(route, /authenticateAdminRequest\(req\)/);
+  assert.match(route, /requireSameOrigin\(req\)/);
+  assert.match(grants, /quizpatente-plus-admin-grants/);
+  assert.match(grants, /locks\/users/);
+  assert.match(grants, /claimGrantRecord\(objectKey, record, targetClaim\)/);
+  assert.match(grants, /payload->>'claimId' = \$5/);
+  assert.match(grants, /for update/);
+  assert.match(fulfillment, /loadPaidPlusEntitlement\(user\)/);
+  assert.match(app, /error\.status === 409/);
+  assert.match(app, /focusAdminGrantFeedback/);
+  assert.match(app, /!plusState\.loading/);
+  assert.match(
+    app,
+    /clearPremiumContentCaches\(\);\s*const requestContext = captureAccessContext\(\)/,
+  );
+  assert.match(
+    app,
+    /document\.activeElement\?\.classList\.contains\("admin-plus-feedback"\)/,
+  );
+  assert.match(
+    app,
+    /grantButton\.disabled =\s*plus\.active \|\|\s*adminState\.loading/,
+  );
+});

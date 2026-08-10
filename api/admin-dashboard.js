@@ -6,6 +6,7 @@ const {
 } = require("../lib/user-store");
 
 module.exports = async function handler(req, res) {
+  res.setHeader("Cache-Control", "private, no-store");
   if (req.method !== "GET") return sendJson(res, 405, { error: "Metodo non supportato." });
 
   try {

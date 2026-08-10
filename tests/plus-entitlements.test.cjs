@@ -5,7 +5,14 @@ process.env.APP_SECRET = "test-only-entitlement-secret";
 
 test("paid access is durably recoverable by the same authenticated account", async () => {
   let stored = null;
+  let manualStored = null;
   global.__quizPatenteDbQuery = async (sql, params) => {
+    if (
+      sql.includes("select payload") &&
+      params?.[0] === "quizpatente-plus-admin-grants"
+    ) {
+      return manualStored ? [{ payload: manualStored }] : [];
+    }
     if (sql.includes("select payload"))
       return stored ? [{ payload: stored }] : [];
     if (sql.includes("insert into app_kv_objects")) {
@@ -116,7 +123,56 @@ test("paid access is durably recoverable by the same authenticated account", asy
       eventId: "evt_dispute_closed_456",
     });
     assert.equal(refundRestore, null);
+
+    manualStored = {
+      version: 1,
+      status: "granted",
+      requestId: "55555555-5555-4555-8555-555555555555",
+      grantId: "manual:55555555-5555-4555-8555-555555555555",
+      source: "manual_admin",
+      targetUserId: user.id,
+      grantedByUserId: "admin-user",
+      durationDays: 30,
+      validFrom: paidAt,
+      expiresAt,
+      createdAt: paidAt,
+    };
+    const effectiveAfterRefund = await loadPlusEntitlement(user);
+    assert.equal(effectiveAfterRefund.active, true);
+    assert.equal(effectiveAfterRefund.source, "manual_admin");
   } finally {
     delete global.__quizPatenteDbQuery;
   }
+});
+
+test("an active manual grant survives a revoked or shorter Stripe entitlement", () => {
+  const { selectEffectiveEntitlement } = require("../lib/plus-entitlements");
+  const manual = {
+    active: true,
+    source: "manual_admin",
+    checkoutId: "manual:grant-id",
+    expiresAt: new Date(Date.now() + 20_000).toISOString(),
+  };
+  const revokedStripe = {
+    active: false,
+    source: "stripe",
+    checkoutId: "cs_paid",
+    expiresAt: new Date(Date.now() + 40_000).toISOString(),
+    revokedAt: new Date().toISOString(),
+  };
+  assert.equal(
+    selectEffectiveEntitlement(revokedStripe, manual).source,
+    "manual_admin",
+  );
+
+  const shorterStripe = {
+    ...revokedStripe,
+    active: true,
+    revokedAt: null,
+    expiresAt: new Date(Date.now() + 10_000).toISOString(),
+  };
+  assert.equal(
+    selectEffectiveEntitlement(shorterStripe, manual).source,
+    "manual_admin",
+  );
 });
