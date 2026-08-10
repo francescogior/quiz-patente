@@ -10,13 +10,8 @@ const PLUS_TOKEN_LEGACY_KEY = "quiz-patente-plus-token-v1";
 const PLUS_TOKENS_KEY = "quiz-patente-plus-tokens-v2";
 const PLUS_PENDING_SESSION_KEY = "quiz-patente-plus-pending-session-v1";
 const PLUS_PENDING_CHECKOUT_URL_KEY = "quiz-patente-plus-checkout-url-v1";
-const PLUS_CHECKOUT_URL = "https://proofkit.realb.it/api/checkout";
-const PLUS_PRODUCT = {
-  experimentSlug: "quizpatente-plus",
-  title: "Quiz Patente Plus — 30 giorni",
-  priceCents: 399,
-  returnUrl: "https://quizpatente.realb.it/",
-};
+const PLUS_CHECKOUT_ATTEMPT_KEY = "quiz-patente-plus-checkout-attempt-v1";
+const PLUS_CHECKOUT_URL = "./api/plus-checkout";
 const settings = bank?.settings ?? {
   examQuestions: 30,
   examMinutes: 20,
@@ -1610,6 +1605,7 @@ function resetToAnonymousDemo() {
   localStorage.removeItem(DEMO_STORAGE_KEY);
   localStorage.removeItem(PLUS_PENDING_SESSION_KEY);
   localStorage.removeItem(PLUS_PENDING_CHECKOUT_URL_KEY);
+  localStorage.removeItem(PLUS_CHECKOUT_ATTEMPT_KEY);
   clearPremiumContentCaches();
   state = createExam({ mode: "demo", count: 1 });
   persistSession();
@@ -1960,6 +1956,7 @@ async function activatePlusCheckout(sessionId) {
     storePlusTokenForUser(requestContext.userId, response.token);
     localStorage.removeItem(PLUS_PENDING_SESSION_KEY);
     localStorage.removeItem(PLUS_PENDING_CHECKOUT_URL_KEY);
+    localStorage.removeItem(PLUS_CHECKOUT_ATTEMPT_KEY);
     return true;
   } catch (error) {
     if (
@@ -2011,11 +2008,14 @@ async function startPlusCheckout() {
   renderPlus();
 
   try {
-    const response = await fetchJson(PLUS_CHECKOUT_URL, {
+    const attemptId =
+      localStorage.getItem(PLUS_CHECKOUT_ATTEMPT_KEY) ||
+      createCheckoutAttemptId();
+    localStorage.setItem(PLUS_CHECKOUT_ATTEMPT_KEY, attemptId);
+    const response = await authFetch(PLUS_CHECKOUT_URL, {
       method: "POST",
       body: JSON.stringify({
-        ...PLUS_PRODUCT,
-        email: authState.user.email,
+        attemptId,
         immediateAccessConsent: true,
       }),
     });
@@ -2075,6 +2075,7 @@ async function clearPendingPlusCheckout() {
       "Stripe conferma che la sessione è scaduta. Puoi iniziare un nuovo pagamento.";
     localStorage.removeItem(PLUS_PENDING_SESSION_KEY);
     localStorage.removeItem(PLUS_PENDING_CHECKOUT_URL_KEY);
+    localStorage.removeItem(PLUS_CHECKOUT_ATTEMPT_KEY);
   } catch (error) {
     if (
       error.stale ||
@@ -2094,6 +2095,13 @@ async function clearPendingPlusCheckout() {
       renderAuth();
     }
   }
+}
+
+function createCheckoutAttemptId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  const random = new Uint32Array(4);
+  globalThis.crypto.getRandomValues(random);
+  return [...random].map((value) => value.toString(16).padStart(8, "0")).join("");
 }
 
 function renderPlus() {

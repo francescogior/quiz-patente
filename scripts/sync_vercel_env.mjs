@@ -9,6 +9,12 @@ const REQUIRED_KEYS = [
   "REPORT_EMAIL_TO",
   "EMAIL_FROM",
   "OPENAI_MODEL",
+  "STRIPE_SECRET_KEY",
+  "STRIPE_WEBHOOK_SECRET",
+  "STRIPE_ACCOUNT_ID",
+  "STRIPE_PLUS_PRODUCT_ID",
+  "STRIPE_PLUS_PRICE_ID",
+  "STRIPE_EXPECT_LIVEMODE",
 ];
 
 const env = parseDotEnv(await readFile(".env.local", "utf8"));

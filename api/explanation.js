@@ -22,7 +22,7 @@ module.exports = async function handler(req, res) {
     if (!question) return sendJson(res, 404, { error: "Domanda non trovata." });
 
     const { user } = await authenticateRequest(req);
-    requirePlusAccess(req, user);
+    await requirePlusAccess(req, user);
 
     const cached = await findCachedExplanation(question.id);
     if (cached) {

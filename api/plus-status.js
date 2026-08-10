@@ -1,7 +1,6 @@
 const { authenticateRequest, publicError, sendJson } = require("../lib/user-store");
 const {
   issuePlusToken,
-  plusTokenFromRequest,
   verifyPlusToken,
 } = require("../lib/plus-access");
 const { loadPlusEntitlement } = require("../lib/plus-entitlements");
@@ -11,18 +10,16 @@ module.exports = async function handler(req, res) {
 
   try {
     const { user } = await authenticateRequest(req);
-    let token = plusTokenFromRequest(req);
-    let access = verifyPlusToken(token, user);
-    if (!access.active) {
-      const entitlement = await loadPlusEntitlement(user);
-      if (entitlement?.active) {
-        token = issuePlusToken({
-          user,
-          checkoutId: entitlement.checkoutId,
-          paidAt: entitlement.paidAt,
-        });
-        access = verifyPlusToken(token, user);
-      }
+    const entitlement = await loadPlusEntitlement(user);
+    let token = null;
+    let access = verifyPlusToken("", user);
+    if (entitlement?.active) {
+      token = issuePlusToken({
+        user,
+        checkoutId: entitlement.checkoutId,
+        paidAt: entitlement.paidAt,
+      });
+      access = verifyPlusToken(token, user);
     }
     return sendJson(res, 200, {
       access,

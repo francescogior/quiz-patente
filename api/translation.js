@@ -49,7 +49,7 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    requirePlusAccess(req, user);
+    await requirePlusAccess(req, user);
     const cachePath = buildCachePath(question, language, explanation);
     const cached = await findCachedTranslation(cachePath);
     if (cached) {

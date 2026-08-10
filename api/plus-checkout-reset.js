@@ -5,12 +5,10 @@ const {
   sendJson,
 } = require("../lib/user-store");
 const {
-  CURRENCY,
-  PRICE_CENTS,
-  PRODUCT_SLUG,
-} = require("../lib/plus-access");
-
-const CHECKOUT_STATUS_URL = "https://proofkit.realb.it/api/checkout/status";
+  expirePlusCheckoutSession,
+  retrievePlusCheckoutSession,
+  validatePlusCheckoutSession,
+} = require("../lib/stripe-checkout");
 
 module.exports = async function handler(req, res) {
   if (req.method !== "POST") {
@@ -18,63 +16,39 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    await authenticateRequest(req);
+    const { user } = await authenticateRequest(req);
     const body = await readJson(req);
-    const sessionId = String(body.sessionId || "").trim();
-    if (!/^cs_(test_|live_)?[A-Za-z0-9_]{12,240}$/.test(sessionId)) {
-      return sendJson(res, 400, { error: "Sessione di pagamento non valida." });
-    }
-
-    const url = new URL(CHECKOUT_STATUS_URL);
-    url.searchParams.set("sessionId", sessionId);
-    const response = await fetch(url, {
-      headers: { Accept: "application/json" },
+    let session = await retrievePlusCheckoutSession(body.sessionId);
+    const checkout = validatePlusCheckoutSession(session, user, {
+      requirePaid: false,
     });
-    const payload = await response.json().catch(() => null);
-    if (!response.ok || !payload?.ok || !payload.checkout) {
-      const error = new Error(payload?.error || "Checkout non trovato.");
-      error.publicMessage =
-        "Non posso verificare che il pagamento sia sicuro da scartare. Riprova tra poco.";
-      error.statusCode = 502;
-      throw error;
-    }
 
-    const checkout = payload.checkout;
-    const exactProduct =
-      checkout.experimentSlug === PRODUCT_SLUG &&
-      checkout.amountCents === PRICE_CENTS &&
-      String(checkout.currency || "").toLowerCase() === CURRENCY;
-    if (!exactProduct) {
-      return sendJson(res, 403, {
-        error: "Questa sessione non appartiene a Quiz Patente Plus.",
-      });
-    }
-    if (checkout.status === "paid") {
+    if (checkout.paymentStatus === "paid") {
       return sendJson(res, 409, {
         error:
-          "Il pagamento è completato: non ricominciare. Usa “Riprova l’attivazione” o contatta l’assistenza.",
+          "Il pagamento è completato: usa “Riprova l’attivazione” o contatta l’assistenza.",
       });
     }
-
-    const stripeConfirmedExpired =
-      payload.sync?.ok === true && checkout.status === "expired";
-    if (!stripeConfirmedExpired) {
+    if (session.status === "open") {
+      session = await expirePlusCheckoutSession(session.id);
+    }
+    if (session.status !== "expired") {
       return sendJson(res, 409, {
         error:
-          "La sessione può ancora essere pagata. Riapri lo stesso checkout o attendi che Stripe ne confermi la scadenza.",
+          "La sessione può ancora essere pagata. Riapri lo stesso checkout o riprova tra poco.",
       });
     }
 
     return sendJson(res, 200, {
       ok: true,
       discardable: true,
-      status: checkout.status,
+      status: session.status,
     });
   } catch (error) {
-    const result = publicError(
+    const response = publicError(
       error,
       "Non posso verificare il tentativo di pagamento.",
     );
-    return sendJson(res, result.statusCode, result.payload);
+    return sendJson(res, response.statusCode, response.payload);
   }
 };

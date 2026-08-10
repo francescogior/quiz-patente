@@ -6,13 +6,25 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
-test("Plus checkout is wired to the exact product and production return URL", () => {
+test("Plus checkout is app-owned and server-authoritative", () => {
   const app = read("app.js");
-  assert.match(app, /experimentSlug:\s*"quizpatente-plus"/);
-  assert.match(app, /title:\s*"Quiz Patente Plus — 30 giorni"/);
-  assert.match(app, /priceCents:\s*399/);
-  assert.match(app, /returnUrl:\s*"https:\/\/quizpatente\.realb\.it\/"/);
+  const route = read("api/plus-checkout.js");
+  const stripe = read("lib/stripe-checkout.js");
+  assert.match(app, /PLUS_CHECKOUT_URL = "\.\/api\/plus-checkout"/);
+  assert.match(app, /authFetch\(PLUS_CHECKOUT_URL/);
+  assert.doesNotMatch(app, /proofkit\.realb\.it/);
+  assert.doesNotMatch(app, /priceCents:\s*399/);
   assert.match(app, /immediateAccessConsent:\s*true/);
+  assert.match(route, /authenticateRequest\(req\)/);
+  assert.match(route, /body\.immediateAccessConsent !== true/);
+  assert.match(stripe, /STRIPE_PLUS_PRICE_ID/);
+  assert.match(stripe, /STRIPE_PLUS_PRODUCT_ID/);
+  assert.match(stripe, /client\.prices\.retrieve/);
+  assert.match(stripe, /PRICE_CENTS/);
+  assert.match(stripe, /CURRENCY/);
+  assert.match(stripe, /Quiz Patente/);
+  assert.match(stripe, /branding_settings/);
+  assert.match(stripe, /assets\/icons\/icon-512\.png/);
 });
 
 test("account UI discloses the duration, consent, and legal pages", () => {
@@ -29,7 +41,7 @@ test("account UI discloses the duration, consent, and legal pages", () => {
 
 test("service worker revision includes the legal pages", () => {
   const worker = read("service-worker.js");
-  assert.match(worker, /quiz-patente-ab-v30/);
+  assert.match(worker, /quiz-patente-ab-v31/);
   assert.match(worker, /\.\/terms\.html/);
   assert.match(worker, /\.\/refunds\.html/);
   assert.match(worker, /\.\/privacy\.html/);
@@ -53,21 +65,39 @@ test("checkout recovery is persisted and callback URLs bypass CacheStorage", () 
   assert.doesNotMatch(cancelledBranch, /clearPendingPlusCheckout/);
   assert.match(app, /checkoutUrl\.hostname !== "checkout\.stripe\.com"/);
   assert.match(app, /\.\/api\/plus-checkout-reset/);
-  assert.match(reset, /payload\.sync\?\.ok === true/);
-  assert.match(reset, /checkout\.status === "paid"/);
-  assert.match(reset, /checkout\.status === "expired"/);
-  assert.doesNotMatch(reset, /checkout\.status === "open"/);
+  assert.match(reset, /retrievePlusCheckoutSession/);
+  assert.match(reset, /expirePlusCheckoutSession/);
+  assert.match(reset, /checkout\.paymentStatus === "paid"/);
+  assert.match(reset, /session\.status !== "expired"/);
   assert.match(worker, /url\.searchParams\.has\("checkout"\)/);
   assert.match(worker, /url\.searchParams\.has\("session_id"\)/);
   assert.match(worker, /cache: "no-store"/);
 });
 
-test("activation binds the Stripe payer hash and pass duration to paidAt", () => {
+test("activation verifies Stripe directly and binds pass duration to charge paidAt", () => {
   const activation = read("api/plus-activate.js");
   const access = read("lib/plus-access.js");
-  assert.match(activation, /customerEmailSha256/);
-  assert.match(activation, /createHash\("sha256"\)/);
+  const stripe = read("lib/stripe-checkout.js");
+  assert.match(activation, /retrievePlusCheckoutSession/);
+  assert.match(activation, /validatePlusCheckoutSession/);
+  assert.match(stripe, /payment_intent\.latest_charge/);
+  assert.match(stripe, /customerEmailSha256/);
   assert.match(access, /paidAtSeconds \+ ACCESS_DAYS/);
+});
+
+test("signed Stripe webhook fulfills Plus without a browser return", () => {
+  const webhook = read("api/stripe-webhook.mjs");
+  assert.match(webhook, /request\.arrayBuffer\(\)/);
+  assert.doesNotMatch(webhook, /request\.body/);
+  assert.match(webhook, /constructStripeWebhookEvent/);
+  assert.match(webhook, /checkout\.session\.completed/);
+  assert.match(webhook, /checkout\.session\.async_payment_succeeded/);
+  assert.match(webhook, /charge\.refunded/);
+  assert.match(webhook, /charge\.dispute\.created/);
+  assert.match(webhook, /charge\.dispute\.closed/);
+  assert.match(webhook, /recordPlusPaymentRevocation/);
+  assert.match(webhook, /fulfillPlusCheckout/);
+  assert.match(webhook, /quizpatente-stripe-events/);
 });
 
 test("private translation cache uses the server-only Neon key-value store", () => {
@@ -102,11 +132,13 @@ test("paid access is persisted and recoverable without relying on email delivery
   const activation = read("api/plus-activate.js");
   const status = read("api/plus-status.js");
   const store = read("lib/plus-entitlements.js");
-  assert.match(activation, /savePlusEntitlement\(user, access\)/);
+  const fulfillment = read("lib/plus-fulfillment.js");
+  assert.match(activation, /fulfillPlusCheckout\(user, checkout\)/);
+  assert.match(fulfillment, /savePlusEntitlement\(user, access\)/);
   assert.match(status, /loadPlusEntitlement\(user\)/);
   assert.match(status, /issuePlusToken/);
   assert.match(store, /quizpatente-plus-entitlements/);
   assert.match(store, /readJson\(BUCKET, entitlementPath\(user\)\)/);
-  assert.match(activation, /checkoutId: entitlement\.checkoutId/);
-  assert.match(activation, /paidAt: entitlement\.paidAt/);
+  assert.match(fulfillment, /checkoutId: entitlement\.checkoutId/);
+  assert.match(fulfillment, /paidAt: entitlement\.paidAt/);
 });
