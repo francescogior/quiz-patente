@@ -220,7 +220,7 @@ function publicImageUrl(imagePath, req) {
 
 function normalizeExplanation(row) {
   return {
-    questionId: row.question_id,
+    questionId: Number(row.question_id),
     trueExplanation: row.true_explanation,
     falseExplanation: row.false_explanation,
     keyPoint: row.key_point,

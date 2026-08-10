@@ -87,6 +87,11 @@ test("new AI generations use atomic distributed quota slots and generation locks
   assert.match(explanation, /`\$\{PROMPT_VERSION\}:\$\{question\.id\}`/);
 });
 
+test("Neon bigint question ids keep the numeric API contract", () => {
+  const explanation = read("api/explanation.js");
+  assert.match(explanation, /questionId: Number\(row\.question_id\)/);
+});
+
 test("paid access is persisted and recoverable without relying on email delivery", () => {
   const activation = read("api/plus-activate.js");
   const status = read("api/plus-status.js");
