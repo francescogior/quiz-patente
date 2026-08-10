@@ -67,12 +67,10 @@ test("activation binds the Stripe payer hash and pass duration to paidAt", () =>
   assert.match(access, /paidAtSeconds \+ ACCESS_DAYS/);
 });
 
-test("private translation cache uses the authenticated download endpoint", () => {
+test("private translation cache uses the server-only Neon key-value store", () => {
   const translation = read("api/translation.js");
-  assert.match(
-    translation,
-    /storage\/v1\/object\/authenticated\/\$\{BUCKET\}/,
-  );
+  assert.match(translation, /readCachedJson\(BUCKET, cachePath\)/);
+  assert.match(translation, /writeJson\(BUCKET, cachePath, translation\)/);
 });
 
 test("new AI generations use atomic distributed quota slots and generation locks", () => {
@@ -82,7 +80,7 @@ test("new AI generations use atomic distributed quota slots and generation locks
   assert.match(usage, /DAILY_LIMIT = 30/);
   assert.match(usage, /BURST_LIMIT = 6/);
   assert.match(usage, /claimFirstAvailableSlot/);
-  assert.match(usage, /"x-upsert": "false"/);
+  assert.match(usage, /claimJson\(BUCKET, objectPath, payload\)/);
   assert.match(usage, /locks\/\$\{dateKey\}/);
   assert.match(translation, /consumePlusGeneration\(user, "translation", cachePath\)/);
   assert.match(explanation, /consumePlusGeneration\(/);
@@ -97,7 +95,7 @@ test("paid access is persisted and recoverable without relying on email delivery
   assert.match(status, /loadPlusEntitlement\(user\)/);
   assert.match(status, /issuePlusToken/);
   assert.match(store, /quizpatente-plus-entitlements/);
-  assert.match(store, /objectUrl\("authenticated"/);
+  assert.match(store, /readJson\(BUCKET, entitlementPath\(user\)\)/);
   assert.match(activation, /checkoutId: entitlement\.checkoutId/);
   assert.match(activation, /paidAt: entitlement\.paidAt/);
 });

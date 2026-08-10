@@ -12,9 +12,9 @@ La banca dati viene dal Portale dell'Automobilista, sezione pubblica "Quiz per l
 
 Le domande grafiche senza associazione immagine sicura vengono escluse durante la generazione, per evitare schede con riferimenti a figure mancanti.
 
-La fonte ministeriale non include spiegazioni testuali per le singole risposte. Nel riepilogo l'app può generare spiegazioni AI, salvandole su Supabase per riusarle senza rigenerarle.
+La fonte ministeriale non include spiegazioni testuali per le singole risposte. Nel riepilogo l'app può generare spiegazioni AI, salvandole su Neon Postgres per riusarle senza rigenerarle.
 
-Con Supabase e Resend configurati, l'app abilita anche un accesso passwordless via codice email e salva le simulazioni completate per mostrare i progressi dell'utente.
+Con Neon e Resend configurati, l'app abilita anche un accesso passwordless via codice email e salva le simulazioni completate per mostrare i progressi dell'utente.
 
 ## Backend leggero
 
@@ -30,7 +30,7 @@ Poi compila `.env.local` e sincronizza le env production su Vercel:
 node scripts/sync_vercel_env.mjs
 ```
 
-Prima del deploy, crea le tabelle con `supabase/schema.sql` nel SQL Editor di Supabase. Puoi verificare che siano raggiungibili con:
+Il database Neon è provisionato tramite Vercel Marketplace. Prima del deploy, applica `neon/schema.sql` e verifica che le tabelle siano raggiungibili con:
 
 ```bash
 node scripts/check_ai_setup.mjs

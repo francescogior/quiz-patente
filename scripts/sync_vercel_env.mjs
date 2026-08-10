@@ -2,8 +2,8 @@ import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 
 const REQUIRED_KEYS = [
-  "SUPABASE_URL",
-  "SUPABASE_SERVICE_ROLE_KEY",
+  "DATABASE_URL",
+  "APP_SECRET",
   "OPENAI_API_KEY",
   "RESEND_API_KEY",
   "REPORT_EMAIL_TO",

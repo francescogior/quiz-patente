@@ -5,6 +5,11 @@
   "type": "commonjs",
   "scripts": {
     "test": "node --test tests/*.test.cjs",
-    "check": "node --check app.js && node --check lib/*.js && node --check api/*.js"
+    "check": "node --check app.js && node --check lib/*.js && node --check api/*.js",
+    "db:check": "node scripts/check_ai_setup.mjs",
+    "db:migrate:supabase": "node scripts/migrate_supabase_to_neon.mjs"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.1.0"
   }
 }

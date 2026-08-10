@@ -4,13 +4,13 @@ const path = require("node:path");
 const { authenticateRequest, publicError, readJson, sendJson } = require("../lib/user-store");
 const { requirePlusAccess } = require("../lib/plus-access");
 const { consumePlusGeneration } = require("../lib/plus-usage");
+const { readJson: readCachedJson, writeJson } = require("../lib/db-kv");
 
 const PROMPT_VERSION = "quiz-patente-translation-v1";
 const BUCKET = "question-translations";
 const ORIGINAL_LANGUAGE = "it";
 
 let questionMap;
-let bucketReady = false;
 
 module.exports = async function handler(req, res) {
   if (req.method !== "POST") return sendJson(res, 405, { error: "Metodo non supportato." });
@@ -149,13 +149,7 @@ function hashText(value) {
 
 async function findCachedTranslation(cachePath) {
   try {
-    await ensureBucket();
-    const response = await fetch(storageReadUrl(cachePath), {
-      headers: supabaseHeaders(),
-    });
-    if (response.status === 404) return null;
-    if (!response.ok) throw new Error(await response.text());
-    return response.json();
+    return await readCachedJson(BUCKET, cachePath);
   } catch (error) {
     console.error("Translation cache read failed", { message: error.message });
     return null;
@@ -164,65 +158,13 @@ async function findCachedTranslation(cachePath) {
 
 async function saveCachedTranslation(cachePath, translation) {
   try {
-    await ensureBucket();
-    const response = await fetch(storageObjectUrl(cachePath), {
-      method: "POST",
-      headers: {
-        ...supabaseHeaders(),
-        "Content-Type": "application/json",
-        "x-upsert": "true",
-      },
-      body: JSON.stringify(translation),
-    });
-    if (!response.ok) throw new Error(await response.text());
+    await writeJson(BUCKET, cachePath, translation);
   } catch (error) {
     console.error("Translation cache write failed", { message: error.message });
     error.publicMessage = "Non riesco a salvare la nuova traduzione. Riprova tra poco.";
     error.statusCode = 503;
     throw error;
   }
-}
-
-async function ensureBucket() {
-  if (bucketReady) return;
-
-  const existing = await fetch(`${supabaseUrl()}/storage/v1/bucket/${BUCKET}`, {
-    headers: supabaseHeaders(),
-  });
-  if (existing.ok) {
-    bucketReady = true;
-    return;
-  }
-  const existingBody = await existing.text();
-  const missingBucket = existing.status === 404 || existingBody.includes("Bucket not found");
-  if (!missingBucket) throw new Error(existingBody);
-
-  const created = await fetch(`${supabaseUrl()}/storage/v1/bucket`, {
-    method: "POST",
-    headers: {
-      ...supabaseHeaders(),
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      id: BUCKET,
-      name: BUCKET,
-      public: false,
-      file_size_limit: 200000,
-      allowed_mime_types: ["application/json"],
-    }),
-  });
-  if (!created.ok && created.status !== 409) throw new Error(await created.text());
-  bucketReady = true;
-}
-
-function storageObjectUrl(cachePath) {
-  const encodedPath = cachePath.split("/").map(encodeURIComponent).join("/");
-  return `${supabaseUrl()}/storage/v1/object/${BUCKET}/${encodedPath}`;
-}
-
-function storageReadUrl(cachePath) {
-  const encodedPath = cachePath.split("/").map(encodeURIComponent).join("/");
-  return `${supabaseUrl()}/storage/v1/object/authenticated/${BUCKET}/${encodedPath}`;
 }
 
 async function generateTranslation(question, language, explanation) {
@@ -297,18 +239,6 @@ function extractOutputText(payload) {
   if (payload?.output_text) return payload.output_text;
   const content = payload?.output?.flatMap((item) => item.content || []) || [];
   return content.find((item) => item.type === "output_text")?.text || null;
-}
-
-function supabaseUrl() {
-  return requireEnv("SUPABASE_URL").replace(/\/$/, "");
-}
-
-function supabaseHeaders() {
-  const key = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
-  return {
-    apikey: key,
-    Authorization: `Bearer ${key}`,
-  };
 }
 
 function openaiModel() {

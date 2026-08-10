@@ -3,6 +3,7 @@ const path = require("node:path");
 const { authenticateRequest } = require("../lib/user-store");
 const { requirePlusAccess } = require("../lib/plus-access");
 const { consumePlusGeneration } = require("../lib/plus-usage");
+const { query } = require("../lib/db");
 
 const PROMPT_VERSION = "quiz-patente-explanation-v2";
 const TABLE = "question_explanations";
@@ -68,28 +69,22 @@ function getQuestion(id) {
 }
 
 async function findCachedExplanation(questionId) {
-  const url = new URL(`${supabaseUrl()}/rest/v1/${TABLE}`);
-  url.searchParams.set("question_id", `eq.${questionId}`);
-  url.searchParams.set("prompt_version", `eq.${PROMPT_VERSION}`);
-  url.searchParams.set(
-    "select",
-    "question_id,true_explanation,false_explanation,key_point,confidence,model,prompt_version,updated_at",
-  );
-
-  const response = await fetch(url, { headers: supabaseHeaders() });
-  if (!response.ok) {
-    const message = await response.text();
-    throw setupError(message);
+  try {
+    const rows = await query(
+      `select question_id, true_explanation, false_explanation, key_point,
+              confidence, model, prompt_version, updated_at
+         from ${TABLE}
+        where question_id = $1 and prompt_version = $2
+        limit 1`,
+      [questionId, PROMPT_VERSION],
+    );
+    return rows[0] || null;
+  } catch (error) {
+    throw setupError(error.message);
   }
-
-  const rows = await response.json();
-  return rows[0] || null;
 }
 
 async function saveExplanation(question, explanation) {
-  const url = new URL(`${supabaseUrl()}/rest/v1/${TABLE}`);
-  url.searchParams.set("on_conflict", "question_id");
-
   const row = {
     question_id: question.id,
     question_text: question.text,
@@ -105,23 +100,32 @@ async function saveExplanation(question, explanation) {
     updated_at: new Date().toISOString(),
   };
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      ...supabaseHeaders(),
-      "Content-Type": "application/json",
-      Prefer: "resolution=merge-duplicates,return=representation",
-    },
-    body: JSON.stringify(row),
-  });
-
-  if (!response.ok) {
-    const message = await response.text();
-    throw setupError(message);
+  try {
+    const rows = await query(
+      `insert into ${TABLE} (
+         question_id, question_text, topic, correct_answer, image_path,
+         true_explanation, false_explanation, key_point, confidence,
+         model, prompt_version, updated_at
+       ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+       on conflict (question_id) do update set
+         question_text = excluded.question_text,
+         topic = excluded.topic,
+         correct_answer = excluded.correct_answer,
+         image_path = excluded.image_path,
+         true_explanation = excluded.true_explanation,
+         false_explanation = excluded.false_explanation,
+         key_point = excluded.key_point,
+         confidence = excluded.confidence,
+         model = excluded.model,
+         prompt_version = excluded.prompt_version,
+         updated_at = excluded.updated_at
+       returning *`,
+      Object.values(row),
+    );
+    return rows[0] || row;
+  } catch (error) {
+    throw setupError(error.message);
   }
-
-  const rows = await response.json();
-  return rows[0] || row;
 }
 
 async function generateExplanation(question, req) {
@@ -233,18 +237,6 @@ function extractOutputText(payload) {
   return content.find((item) => item.type === "output_text")?.text || null;
 }
 
-function supabaseUrl() {
-  return requireEnv("SUPABASE_URL").replace(/\/$/, "");
-}
-
-function supabaseHeaders() {
-  const key = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
-  return {
-    apikey: key,
-    Authorization: `Bearer ${key}`,
-  };
-}
-
 function openaiModel() {
   return process.env.OPENAI_MODEL || "gpt-5-nano";
 }
@@ -263,7 +255,7 @@ function requireEnv(name) {
 function setupError(details) {
   const error = new Error(details);
   error.publicMessage =
-    "Database non pronto: crea le tabelle Supabase indicate in supabase/schema.sql.";
+    "Database non pronto: applica lo schema Neon indicato in neon/schema.sql.";
   error.statusCode = 503;
   return error;
 }

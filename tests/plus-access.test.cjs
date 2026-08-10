@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-process.env.SUPABASE_SERVICE_ROLE_KEY = "test-only-plus-signing-secret";
+process.env.APP_SECRET = "test-only-plus-signing-secret";
 
 const {
   PRODUCT_SLUG,

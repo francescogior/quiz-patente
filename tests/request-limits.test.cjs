@@ -1,8 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-process.env.SUPABASE_URL = "https://project.supabase.co";
-process.env.SUPABASE_SERVICE_ROLE_KEY = "test-only-request-limit-secret";
+process.env.APP_SECRET = "test-only-request-limit-secret";
 
 const {
   BUCKET,
@@ -14,18 +13,10 @@ const {
 } = require("../lib/request-limits");
 
 test("auth limits use durable atomic slots without exposing email or IP", async () => {
-  const originalFetch = global.fetch;
   const requests = [];
-  global.fetch = async (url, options = {}) => {
-    const value = String(url);
-    requests.push({ value, options });
-    if (value.endsWith(`/storage/v1/bucket/${BUCKET}`)) {
-      return new Response("{}", { status: 200 });
-    }
-    if (value.includes(`/storage/v1/object/${BUCKET}/`) && options.method === "POST") {
-      return new Response("{}", { status: 200 });
-    }
-    throw new Error(`Unexpected request: ${value}`);
+  global.__quizPatenteDbQuery = async (sql, params) => {
+    requests.push({ sql, namespace: params[0], key: params[1] });
+    return [{ object_key: params[1] }];
   };
 
   try {
@@ -34,27 +25,19 @@ test("auth limits use durable atomic slots without exposing email or IP", async 
       "driver@example.com",
       new Date("2026-07-26T10:15:00.000Z"),
     );
-    const claims = requests.filter(({ value }) => value.includes("/storage/v1/object/"));
+    const claims = requests.filter(({ sql }) => sql.includes("insert into app_kv_objects"));
     assert.equal(claims.length, 4);
-    assert.equal(claims.every(({ options }) => options.headers["x-upsert"] === "false"), true);
-    assert.equal(claims.some(({ value }) => value.includes("driver%40example.com")), false);
-    assert.equal(claims.some(({ value }) => value.includes("203.0.113.4")), false);
+    assert.equal(claims.every(({ namespace }) => namespace === BUCKET), true);
+    assert.equal(claims.some(({ key }) => key.includes("driver@example.com")), false);
+    assert.equal(claims.some(({ key }) => key.includes("203.0.113.4")), false);
   } finally {
-    global.fetch = originalFetch;
+    delete global.__quizPatenteDbQuery;
   }
 });
 
 test("a distributed limit fails closed after every unique slot is claimed", async () => {
-  const originalFetch = global.fetch;
   let claims = 0;
-  global.fetch = async (url, options = {}) => {
-    const value = String(url);
-    if (value.includes(`/storage/v1/object/${BUCKET}/`) && options.method === "POST") {
-      claims += 1;
-      return new Response("The resource already exists", { status: 409 });
-    }
-    throw new Error(`Unexpected request: ${value}`);
-  };
+  global.__quizPatenteDbQuery = async () => { claims += 1; return []; };
 
   try {
     await assert.rejects(
@@ -75,20 +58,15 @@ test("a distributed limit fails closed after every unique slot is claimed", asyn
     );
     assert.equal(claims, 2);
   } finally {
-    global.fetch = originalFetch;
+    delete global.__quizPatenteDbQuery;
   }
 });
 
 test("OTP verification and exam saves consume their per-account durable caps", async () => {
-  const originalFetch = global.fetch;
   const requests = [];
-  global.fetch = async (url, options = {}) => {
-    const value = String(url);
-    if (value.includes(`/storage/v1/object/${BUCKET}/`) && options.method === "POST") {
-      requests.push(value);
-      return new Response("{}", { status: 200 });
-    }
-    throw new Error(`Unexpected request: ${value}`);
+  global.__quizPatenteDbQuery = async (_sql, params) => {
+    requests.push(params[1]);
+    return [{ object_key: params[1] }];
   };
 
   try {
@@ -104,19 +82,12 @@ test("OTP verification and exam saves consume their per-account durable caps", a
     assert.equal(requests.some((value) => value.includes("exam-write-user-minute")), true);
     assert.equal(requests.some((value) => value.includes("exam-write-user-day")), true);
   } finally {
-    global.fetch = originalFetch;
+    delete global.__quizPatenteDbQuery;
   }
 });
 
 test("the same account cannot report the same question and reason twice per day", async () => {
-  const originalFetch = global.fetch;
-  global.fetch = async (url, options = {}) => {
-    const value = String(url);
-    if (value.includes("report-user-question-day") && options.method === "POST") {
-      return new Response("The resource already exists", { status: 409 });
-    }
-    throw new Error(`Unexpected request: ${value}`);
-  };
+  global.__quizPatenteDbQuery = async () => [];
 
   try {
     await assert.rejects(
@@ -132,13 +103,12 @@ test("the same account cannot report the same question and reason twice per day"
         error.publicMessage === "Hai già inviato questa segnalazione oggi.",
     );
   } finally {
-    global.fetch = originalFetch;
+    delete global.__quizPatenteDbQuery;
   }
 });
 
 test("storage errors stop the protected action instead of resetting the counter", async () => {
-  const originalFetch = global.fetch;
-  global.fetch = async () => new Response("storage unavailable", { status: 500 });
+  global.__quizPatenteDbQuery = async () => { throw new Error("database unavailable"); };
   try {
     await assert.rejects(
       () =>
@@ -156,6 +126,6 @@ test("storage errors stop the protected action instead of resetting the counter"
       (error) => error.statusCode === 503,
     );
   } finally {
-    global.fetch = originalFetch;
+    delete global.__quizPatenteDbQuery;
   }
 });

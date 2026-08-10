@@ -1,28 +1,15 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-process.env.SUPABASE_URL = "https://project.supabase.co";
-process.env.SUPABASE_SERVICE_ROLE_KEY = "test-only-usage-secret";
+process.env.APP_SECRET = "test-only-usage-secret";
 
 test("Plus generation atomically claims burst, daily, and generation slots", async () => {
-  const originalFetch = global.fetch;
   const requests = [];
-  global.fetch = async (url, options = {}) => {
-    const value = String(url);
-    requests.push({ value, method: options.method || "GET" });
-    if (value.endsWith("/storage/v1/bucket/quizpatente-plus-usage")) {
-      return new Response("{}", { status: 200 });
-    }
-    if (value.includes("/storage/v1/object/") && options.method === "POST") {
-      return new Response("{}", { status: 200 });
-    }
-    if (
-      value.endsWith("/storage/v1/object/quizpatente-plus-usage") &&
-      options.method === "DELETE"
-    ) {
-      return new Response("{}", { status: 200 });
-    }
-    throw new Error(`Unexpected request: ${value}`);
+  global.__quizPatenteDbQuery = async (sql, params) => {
+    requests.push({ sql, key: params[1] });
+    if (sql.includes("insert into app_kv_objects")) return [{ object_key: params[1] }];
+    if (sql.includes("delete from app_kv_objects")) return [];
+    throw new Error(`Unexpected query: ${sql}`);
   };
 
   try {
@@ -31,25 +18,18 @@ test("Plus generation atomically claims burst, daily, and generation slots", asy
     const first = await consumePlusGeneration(user, "translation", "question:42:en");
     assert.equal(first.limit, DAILY_LIMIT);
     assert.equal(first.remaining, DAILY_LIMIT - 1);
-    assert.equal(requests.some(({ value }) => value.includes("/burst/")), true);
-    assert.equal(requests.some(({ value }) => value.includes("/daily/")), true);
-    assert.equal(requests.some(({ value }) => value.includes("/locks/")), true);
+    assert.equal(requests.some(({ key }) => key.includes("burst/")), true);
+    assert.equal(requests.some(({ key }) => key.includes("daily/")), true);
+    assert.equal(requests.some(({ key }) => key.includes("locks/")), true);
     await first.release();
-    assert.equal(requests.some(({ method }) => method === "DELETE"), true);
+    assert.equal(requests.some(({ sql }) => sql.includes("delete from")), true);
   } finally {
-    global.fetch = originalFetch;
+    delete global.__quizPatenteDbQuery;
   }
 });
 
 test("distributed burst claims fail closed when every slot already exists", async () => {
-  const originalFetch = global.fetch;
-  global.fetch = async (url, options = {}) => {
-    const value = String(url);
-    if (value.includes("/burst/") && options.method === "POST") {
-      return new Response("The resource already exists", { status: 409 });
-    }
-    throw new Error(`Unexpected request: ${value}`);
-  };
+  global.__quizPatenteDbQuery = async () => [];
 
   try {
     const { consumePlusGeneration } = require("../lib/plus-usage");
@@ -63,6 +43,6 @@ test("distributed burst claims fail closed when every slot already exists", asyn
       (error) => error.statusCode === 429,
     );
   } finally {
-    global.fetch = originalFetch;
+    delete global.__quizPatenteDbQuery;
   }
 });

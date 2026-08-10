@@ -1,8 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-process.env.SUPABASE_URL = "https://project.supabase.co";
-process.env.SUPABASE_SERVICE_ROLE_KEY = "test-only-user-store-secret";
+process.env.APP_SECRET = "test-only-user-store-secret";
 
 const {
   createLoginCode,
@@ -12,30 +11,21 @@ const {
 const { getQuestion } = require("../lib/question-bank");
 
 test("requesting a new OTP invalidates previous active codes before inserting it", async () => {
-  const originalFetch = global.fetch;
   const operations = [];
-  global.fetch = async (url, options = {}) => {
-    const value = String(url);
-    if (value.includes("/rest/v1/app_users")) {
+  global.__quizPatenteDbQuery = async (sql, params) => {
+    if (sql.includes("insert into app_users")) {
       operations.push("user");
-      return Response.json([{ id: "user-123", email: "driver@example.com" }]);
+      return [{ id: "user-123", email: "driver@example.com" }];
     }
-    if (value.includes("/rest/v1/app_login_codes") && options.method === "PATCH") {
+    if (sql.includes("with consumed as")) {
       operations.push("invalidate");
-      assert.match(value, /consumed_at=is\.null/);
-      const payload = JSON.parse(options.body);
-      assert.ok(payload.consumed_at);
-      return new Response(null, { status: 204 });
-    }
-    if (value.endsWith("/rest/v1/app_login_codes") && options.method === "POST") {
       operations.push("insert");
-      const payload = JSON.parse(options.body);
-      assert.equal(payload.user_id, "user-123");
-      assert.equal(payload.email, "driver@example.com");
-      assert.equal(typeof payload.code_hash, "string");
-      return new Response(null, { status: 204 });
+      assert.equal(params[2], "user-123");
+      assert.equal(params[1], "driver@example.com");
+      assert.equal(typeof params[3], "string");
+      return [];
     }
-    throw new Error(`Unexpected request: ${value}`);
+    throw new Error(`Unexpected query: ${sql}`);
   };
 
   try {
@@ -43,29 +33,19 @@ test("requesting a new OTP invalidates previous active codes before inserting it
     assert.match(result.code, /^\d{6}$/);
     assert.deepEqual(operations, ["user", "invalidate", "insert"]);
   } finally {
-    global.fetch = originalFetch;
+    delete global.__quizPatenteDbQuery;
   }
 });
 
 test("OTP consumption is conditional and a lost race cannot create a session", async () => {
-  const originalFetch = global.fetch;
   let sessionCreated = false;
-  global.fetch = async (url, options = {}) => {
-    const value = String(url);
-    if (value.includes("/rest/v1/app_login_codes") && !options.method) {
-      return Response.json([{ id: "code-123", user_id: "user-123" }]);
-    }
-    if (value.includes("/rest/v1/app_login_codes") && options.method === "PATCH") {
-      assert.match(value, /consumed_at=is\.null/);
-      assert.match(value, /expires_at=gt\./);
-      assert.equal(options.headers.Prefer, "return=representation");
-      return Response.json([]);
-    }
-    if (value.includes("/rest/v1/app_sessions")) {
+  global.__quizPatenteDbQuery = async (sql) => {
+    if (sql.includes("update app_login_codes")) return [];
+    if (sql.includes("insert into app_sessions")) {
       sessionCreated = true;
-      return Response.json([]);
+      return [];
     }
-    throw new Error(`Unexpected request: ${value}`);
+    throw new Error(`Unexpected query: ${sql}`);
   };
 
   try {
@@ -75,7 +55,7 @@ test("OTP consumption is conditional and a lost race cannot create a session", a
     );
     assert.equal(sessionCreated, false);
   } finally {
-    global.fetch = originalFetch;
+    delete global.__quizPatenteDbQuery;
   }
 });
 

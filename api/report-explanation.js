@@ -2,6 +2,7 @@ const REPORT_TABLE = "explanation_reports";
 const { buildExplanationReport } = require("../lib/explanation-report");
 const { getQuestion } = require("../lib/question-bank");
 const { enforceExplanationReportLimit } = require("../lib/request-limits");
+const { query } = require("../lib/db");
 const {
   authenticateRequest,
   publicError,
@@ -23,7 +24,7 @@ module.exports = async function handler(req, res) {
     await enforceExplanationReportLimit(user, question.id, report.reason);
 
     const tasks = [];
-    if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    if (process.env.DATABASE_URL) {
       tasks.push(saveReport(report));
     }
     if (process.env.RESEND_API_KEY && process.env.REPORT_EMAIL_TO && process.env.EMAIL_FROM) {
@@ -44,18 +45,18 @@ module.exports = async function handler(req, res) {
 };
 
 async function saveReport(report) {
-  const url = `${process.env.SUPABASE_URL.replace(/\/$/, "")}/rest/v1/${REPORT_TABLE}`;
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-      "Content-Type": "application/json",
-      Prefer: "return=minimal",
-    },
-    body: JSON.stringify(report),
-  });
-  if (!response.ok) throw new Error(await response.text());
+  await query(
+    `insert into ${REPORT_TABLE}
+       (question_id, reason, message, page_url, explanation_meta)
+     values ($1, $2, $3, $4, $5::jsonb)`,
+    [
+      report.question_id,
+      report.reason,
+      report.message,
+      report.page_url,
+      JSON.stringify(report.explanation_meta || {}),
+    ],
+  );
 }
 
 async function sendReportEmail(question, report) {
