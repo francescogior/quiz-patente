@@ -11,7 +11,8 @@ const TABLE = "question_explanations";
 let questionMap;
 
 module.exports = async function handler(req, res) {
-  if (req.method !== "POST") return sendJson(res, 405, { error: "Metodo non supportato." });
+  if (req.method !== "POST")
+    return sendJson(res, 405, { error: "Metodo non supportato." });
 
   let generationClaim;
   try {
@@ -20,6 +21,9 @@ module.exports = async function handler(req, res) {
     const question = getQuestion(questionId);
     if (!question) return sendJson(res, 404, { error: "Domanda non trovata." });
 
+    const { user } = await authenticateRequest(req);
+    requirePlusAccess(req, user);
+
     const cached = await findCachedExplanation(question.id);
     if (cached) {
       return sendJson(res, 200, {
@@ -27,9 +31,6 @@ module.exports = async function handler(req, res) {
         explanation: normalizeExplanation(cached),
       });
     }
-
-    const { user } = await authenticateRequest(req);
-    requirePlusAccess(req, user);
     generationClaim = await consumePlusGeneration(
       user,
       "explanation",
@@ -40,7 +41,9 @@ module.exports = async function handler(req, res) {
 
     return sendJson(res, 200, {
       source: "generated",
-      explanation: normalizeExplanation(row || { ...generated, question_id: question.id }),
+      explanation: normalizeExplanation(
+        row || { ...generated, question_id: question.id },
+      ),
     });
   } catch (error) {
     await generationClaim?.release().catch((releaseError) => {
@@ -63,7 +66,9 @@ function getQuestion(id) {
     if (!source.startsWith(prefix)) throw new Error("Dataset non valido.");
     const json = source.slice(prefix.length).replace(/;$/, "");
     const bank = JSON.parse(json);
-    questionMap = new Map(bank.questions.map((question) => [question.id, question]));
+    questionMap = new Map(
+      bank.questions.map((question) => [question.id, question]),
+    );
   }
   return questionMap.get(id) || null;
 }
@@ -169,7 +174,12 @@ async function generateExplanation(question, req) {
           schema: {
             type: "object",
             additionalProperties: false,
-            required: ["true_explanation", "false_explanation", "key_point", "confidence"],
+            required: [
+              "true_explanation",
+              "false_explanation",
+              "key_point",
+              "confidence",
+            ],
             properties: {
               true_explanation: {
                 type: "string",

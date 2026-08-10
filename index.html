@@ -2,7 +2,10 @@
 <html lang="it">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
     <meta name="theme-color" content="#082f2e" />
     <title>Quiz Patente AB</title>
     <link rel="manifest" href="manifest.webmanifest" />
@@ -28,9 +31,15 @@
           <h1>Quiz Patente AB</h1>
         </div>
         <div class="top-actions">
-          <button class="ghost-button" id="installButton" type="button" hidden>Installa</button>
-          <button class="ghost-button" id="accountButton" type="button">Accedi</button>
-          <button class="primary-button" id="newExamButton" type="button">Nuovo test</button>
+          <button class="ghost-button" id="installButton" type="button" hidden>
+            Installa
+          </button>
+          <button class="ghost-button" id="accountButton" type="button">
+            Accedi
+          </button>
+          <button class="primary-button" id="newExamButton" type="button">
+            Nuovo test
+          </button>
         </div>
       </header>
 
@@ -42,7 +51,7 @@
               <strong id="questionCounter">1/30</strong>
             </div>
             <div class="status-card status-timer">
-              <span class="status-label">Tempo</span>
+              <span class="status-label" id="timerLabel">Tempo</span>
               <strong id="timer">20:00</strong>
             </div>
             <div class="status-card">
@@ -50,7 +59,7 @@
               <strong id="answeredCounter">0/30</strong>
             </div>
             <div class="status-card">
-              <span class="status-label">Soglia</span>
+              <span class="status-label" id="thresholdLabel">Soglia</span>
               <strong id="threshold">3 errori</strong>
             </div>
             <button
@@ -68,16 +77,36 @@
           </div>
         </section>
 
-        <section class="question-panel" id="questionPanel" aria-live="polite">
+        <section
+          class="question-panel"
+          id="questionPanel"
+          aria-live="polite"
+          tabindex="-1"
+        >
           <div class="question-media" id="questionMedia" hidden>
             <img id="questionImage" alt="" />
           </div>
           <div class="question-meta-row">
             <p class="topic" id="questionTopic">Quiz ministeriali</p>
-            <label class="question-language" id="questionLanguageControl" hidden>
+            <label
+              class="question-language"
+              id="questionLanguageControl"
+              hidden
+            >
               <span>Lingua</span>
-              <select id="questionLanguageSelect" aria-label="Lingua traduzione"></select>
+              <select
+                id="questionLanguageSelect"
+                aria-label="Lingua traduzione"
+              ></select>
             </label>
+            <button
+              class="question-plus-cta"
+              id="questionPlusButton"
+              type="button"
+              hidden
+            >
+              Altre lingue con Plus
+            </button>
           </div>
           <h2 id="questionText">Caricamento domanda...</h2>
           <div class="question-translation" id="questionTranslation" hidden>
@@ -86,7 +115,11 @@
           </div>
         </section>
 
-        <nav class="question-dots desktop-dots" id="questionDots" aria-label="Domande della scheda"></nav>
+        <nav
+          class="question-dots desktop-dots"
+          id="questionDots"
+          aria-label="Domande della scheda"
+        ></nav>
 
         <section class="results-panel" id="resultsPanel" hidden>
           <div class="result-hero">
@@ -108,26 +141,59 @@
               <strong id="usedTime">0:00</strong>
             </div>
           </div>
+          <section
+            class="demo-registration-card"
+            id="demoRegistrationCard"
+            hidden
+          >
+            <span class="status-label">Demo completata</span>
+            <h3>Continua con un account gratuito</h3>
+            <p>
+              Registrati con la tua email per accedere alle simulazioni complete
+              in italiano, salvare i risultati e ripassare gli errori.
+            </p>
+            <button
+              class="primary-button"
+              id="demoRegisterButton"
+              type="button"
+            >
+              Registrati gratis
+            </button>
+          </section>
           <div class="review-list" id="reviewList"></div>
         </section>
       </main>
 
       <div class="exam-controls" id="examControls" aria-label="Comandi test">
         <div class="answer-grid" aria-label="Risposte">
-          <button class="answer-button answer-true" data-answer="true" type="button">
+          <button
+            class="answer-button answer-true"
+            data-answer="true"
+            type="button"
+          >
             <span class="answer-key">V</span>
             <span class="answer-copy">Vero</span>
           </button>
-          <button class="answer-button answer-false" data-answer="false" type="button">
+          <button
+            class="answer-button answer-false"
+            data-answer="false"
+            type="button"
+          >
             <span class="answer-key">F</span>
             <span class="answer-copy">Falso</span>
           </button>
         </div>
 
-        <div class="question-actions">
-          <button class="ghost-button" id="prevButton" type="button">Indietro</button>
-          <button class="ghost-button" id="nextButton" type="button">Avanti</button>
-          <button class="danger-button" id="finishButton" type="button">Concludi</button>
+        <div class="question-actions" id="questionActions">
+          <button class="ghost-button" id="prevButton" type="button">
+            Indietro
+          </button>
+          <button class="ghost-button" id="nextButton" type="button">
+            Avanti
+          </button>
+          <button class="danger-button" id="finishButton" type="button">
+            Concludi
+          </button>
         </div>
       </div>
     </div>
@@ -146,9 +212,15 @@
           <span class="status-label">Navigazione</span>
           <h2 id="questionDrawerTitle">Domande</h2>
         </div>
-        <button class="ghost-button" id="closeDrawerButton" type="button">Chiudi</button>
+        <button class="ghost-button" id="closeDrawerButton" type="button">
+          Chiudi
+        </button>
       </div>
-      <nav class="question-dots drawer-dots" id="drawerQuestionDots" aria-label="Domande della scheda"></nav>
+      <nav
+        class="question-dots drawer-dots"
+        id="drawerQuestionDots"
+        aria-label="Domande della scheda"
+      ></nav>
     </aside>
 
     <div class="modal-backdrop" id="modalBackdrop" hidden></div>
@@ -162,23 +234,38 @@
     >
       <div class="drawer-header">
         <div>
-          <span class="status-label">Profilo</span>
-          <h2 id="accountPanelTitle">Profilo</h2>
+          <span class="status-label" id="accountPanelKicker">Profilo</span>
+          <h2 id="accountPanelTitle">Accedi</h2>
         </div>
-        <button class="ghost-button" id="closeAccountButton" type="button">Chiudi</button>
+        <button class="ghost-button" id="closeAccountButton" type="button">
+          Chiudi
+        </button>
       </div>
 
       <div class="auth-card" id="authSignedOut">
+        <p class="auth-intro" id="authIntro">
+          Inserisci la tua email: ti invieremo un codice di accesso a sei cifre.
+        </p>
         <form class="auth-form" id="emailLoginForm">
           <label>
             <span>Email</span>
-            <input id="loginEmail" name="email" type="email" autocomplete="email" required />
+            <input
+              id="loginEmail"
+              name="email"
+              type="email"
+              autocomplete="email"
+              required
+            />
           </label>
-          <button class="primary-button" id="requestCodeButton" type="submit">Invia codice</button>
+          <button class="primary-button" id="requestCodeButton" type="submit">
+            Invia codice
+          </button>
         </form>
         <p class="auth-privacy">
           Usiamo la tua email per l’accesso e la sicurezza dell’account.
-          <a href="privacy.html" target="_blank" rel="noopener">Leggi l’informativa privacy</a>.
+          <a href="privacy.html" target="_blank" rel="noopener"
+            >Leggi l’informativa privacy</a
+          >.
         </p>
         <form class="auth-form" id="codeLoginForm" hidden>
           <label>
@@ -193,7 +280,9 @@
               required
             />
           </label>
-          <button class="primary-button" id="verifyCodeButton" type="submit">Entra</button>
+          <button class="primary-button" id="verifyCodeButton" type="submit">
+            Entra
+          </button>
         </form>
         <p class="auth-status" id="authStatus" aria-live="polite"></p>
       </div>
@@ -204,20 +293,56 @@
             <span class="status-label">Account</span>
             <strong id="accountEmail">utente</strong>
           </div>
-          <button class="ghost-button" id="signOutButton" type="button">Esci</button>
+          <button class="ghost-button" id="signOutButton" type="button">
+            Esci
+          </button>
         </section>
 
-        <div class="profile-tabs" id="profileTabs" role="tablist" aria-label="Sezioni profilo">
-          <button class="profile-tab active" data-profile-tab="summary" type="button">Riepilogo</button>
-          <button class="profile-tab" data-profile-tab="tests" type="button">Test</button>
-          <button class="profile-tab" data-profile-tab="translations" type="button">Traduzioni</button>
-          <button class="profile-tab plus-tab" data-profile-tab="plus" type="button">Plus</button>
-          <button class="profile-tab" data-profile-tab="admin" id="profileAdminTab" type="button" hidden>
+        <div
+          class="profile-tabs"
+          id="profileTabs"
+          role="tablist"
+          aria-label="Sezioni profilo"
+        >
+          <button
+            class="profile-tab active"
+            data-profile-tab="summary"
+            type="button"
+          >
+            Riepilogo
+          </button>
+          <button class="profile-tab" data-profile-tab="tests" type="button">
+            Test
+          </button>
+          <button
+            class="profile-tab"
+            data-profile-tab="translations"
+            type="button"
+          >
+            Traduzioni
+          </button>
+          <button
+            class="profile-tab plus-tab"
+            data-profile-tab="plus"
+            type="button"
+          >
+            Plus
+          </button>
+          <button
+            class="profile-tab"
+            data-profile-tab="admin"
+            id="profileAdminTab"
+            type="button"
+            hidden
+          >
             Admin
           </button>
         </div>
 
-        <section class="profile-view profile-section" data-profile-view="summary">
+        <section
+          class="profile-view profile-section"
+          data-profile-view="summary"
+        >
           <div class="profile-section-title">
             <span class="status-label">Statistiche</span>
             <h3>Le tue simulazioni</h3>
@@ -238,7 +363,11 @@
           </div>
         </section>
 
-        <section class="profile-view profile-section" data-profile-view="tests" hidden>
+        <section
+          class="profile-view profile-section"
+          data-profile-view="tests"
+          hidden
+        >
           <div class="profile-section-title">
             <span class="status-label">Storico</span>
             <h3>Test recenti</h3>
@@ -247,64 +376,113 @@
             <div>
               <span class="status-label">Ripasso</span>
               <strong>Allena gli errori</strong>
-              <p id="revisionSummary">Accedi ai tuoi test salvati per creare un ripasso.</p>
+              <p id="revisionSummary">
+                Accedi ai tuoi test salvati per creare un ripasso.
+              </p>
             </div>
-            <button class="primary-button" id="revisionExamButton" type="button">Ripassa errori</button>
+            <button
+              class="primary-button"
+              id="revisionExamButton"
+              type="button"
+            >
+              Ripassa errori
+            </button>
           </div>
-          <div class="progress-chart" id="progressChart" aria-label="Andamento dei test recenti"></div>
+          <div
+            class="progress-chart"
+            id="progressChart"
+            aria-label="Andamento dei test recenti"
+          ></div>
           <div class="progress-list" id="progressList"></div>
         </section>
 
-        <section class="profile-view profile-section language-card" data-profile-view="translations" hidden>
+        <section
+          class="profile-view profile-section language-card"
+          data-profile-view="translations"
+          hidden
+        >
           <div class="profile-section-title">
-            <span class="status-label">Traduzioni</span>
-            <h3>Lingua predefinita</h3>
+            <span class="status-label">Lingue Plus</span>
+            <h3>Studia nella lingua che preferisci</h3>
           </div>
-          <label>
-            <span>Lingua</span>
-            <select id="accountLanguageSelect"></select>
-          </label>
-          <label class="custom-language-field" id="customLanguageField" hidden>
-            <span>Lingua personalizzata</span>
-            <input
-              id="customLanguageInput"
-              type="text"
-              maxlength="80"
-              placeholder="es. Ucraino, Spagnolo latinoamericano..."
-            />
-          </label>
-          <p id="translationPreferenceStatus"></p>
+          <div class="translation-settings" id="translationSettings" hidden>
+            <label>
+              <span>Lingua</span>
+              <select id="accountLanguageSelect"></select>
+            </label>
+            <label
+              class="custom-language-field"
+              id="customLanguageField"
+              hidden
+            >
+              <span>Lingua personalizzata</span>
+              <input
+                id="customLanguageInput"
+                type="text"
+                maxlength="80"
+                placeholder="es. Ucraino, Spagnolo latinoamericano..."
+              />
+            </label>
+            <p id="translationPreferenceStatus"></p>
+          </div>
+          <div class="translation-upgrade" id="translationUpgrade">
+            <p>
+              La versione Free usa il testo ministeriale originale in italiano.
+            </p>
+            <button
+              class="primary-button"
+              id="translationPlusButton"
+              type="button"
+            >
+              Sblocca le altre lingue con Plus
+            </button>
+          </div>
         </section>
 
-        <section class="profile-view profile-section plus-card" data-profile-view="plus" hidden>
+        <section
+          class="profile-view profile-section plus-card"
+          data-profile-view="plus"
+          hidden
+        >
           <div class="plus-card-head">
             <div>
               <span class="plus-kicker">Quiz Patente Plus</span>
-              <h3>Spiegazioni nuove, quando ti servono</h3>
+              <h3>Capisci gli errori, nella tua lingua</h3>
             </div>
             <strong class="plus-price">€3,99 <small>/ 30 giorni</small></strong>
           </div>
           <ul class="plus-benefits">
-            <li>Genera spiegazioni AI per domande non ancora coperte.</li>
-            <li>Traduci domande e spiegazioni in tutte le lingue disponibili.</li>
+            <li>Leggi le spiegazioni AI nel riepilogo di ogni simulazione.</li>
+            <li>Traduci domande e spiegazioni nelle lingue disponibili.</li>
             <li>Una sola spesa, nessun rinnovo automatico.</li>
           </ul>
           <p class="plus-status" id="plusStatus" aria-live="polite">
-            Le simulazioni ufficiali, lo storico e i contenuti già disponibili restano gratuiti.
+            Free include simulazioni complete in italiano, storico e ripasso
+            degli errori.
           </p>
           <label class="plus-consent" id="plusConsentRow">
             <input id="plusConsent" type="checkbox" />
             <span>
               Chiedo che il pass digitale inizi subito, accetto
               <a href="terms.html" target="_blank" rel="noopener">i termini</a>
-              e riconosco che, dopo l’inizio dell’erogazione, posso perdere l’eventuale
-              diritto di recesso. Restano salvi i diritti inderogabili.
+              e riconosco che, dopo l’inizio dell’erogazione, posso perdere
+              l’eventuale diritto di recesso. Restano salvi i diritti
+              inderogabili.
             </span>
           </label>
-          <button class="primary-button plus-buy-button" id="plusBuyButton" type="button">
+          <button
+            class="primary-button plus-buy-button"
+            id="plusBuyButton"
+            type="button"
+          >
             Attiva Plus — €3,99
           </button>
-          <button class="ghost-button plus-reset-button" id="plusResetButton" type="button" hidden>
+          <button
+            class="ghost-button plus-reset-button"
+            id="plusResetButton"
+            type="button"
+            hidden
+          >
             Verifica e scarta il tentativo non pagato
           </button>
           <p class="plus-legal">
@@ -315,13 +493,20 @@
           </p>
         </section>
 
-        <section class="profile-view admin-card" id="adminPanel" data-profile-view="admin" hidden>
+        <section
+          class="profile-view admin-card"
+          id="adminPanel"
+          data-profile-view="admin"
+          hidden
+        >
           <div class="admin-head">
             <div>
               <span class="status-label">Admin</span>
               <h3>Dashboard</h3>
             </div>
-            <button class="ghost-button" id="refreshAdminButton" type="button">Aggiorna</button>
+            <button class="ghost-button" id="refreshAdminButton" type="button">
+              Aggiorna
+            </button>
           </div>
           <div class="admin-summary" aria-label="Metriche admin">
             <div>
@@ -341,10 +526,25 @@
               <strong id="adminAvgErrors">0</strong>
             </div>
           </div>
-          <div class="admin-tabs" id="adminTabs" role="tablist" aria-label="Sezioni admin">
-            <button class="admin-tab active" data-admin-view="users" type="button">Utenti</button>
-            <button class="admin-tab" data-admin-view="activity" type="button">Attività</button>
-            <button class="admin-tab" data-admin-view="tests" type="button">Test</button>
+          <div
+            class="admin-tabs"
+            id="adminTabs"
+            role="tablist"
+            aria-label="Sezioni admin"
+          >
+            <button
+              class="admin-tab active"
+              data-admin-view="users"
+              type="button"
+            >
+              Utenti
+            </button>
+            <button class="admin-tab" data-admin-view="activity" type="button">
+              Attività
+            </button>
+            <button class="admin-tab" data-admin-view="tests" type="button">
+              Test
+            </button>
           </div>
           <div class="admin-content" id="adminContent" aria-live="polite"></div>
         </section>

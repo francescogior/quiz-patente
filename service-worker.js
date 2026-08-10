@@ -1,6 +1,6 @@
 importScripts("./data/asset-manifest-sw.js");
 
-const CACHE_NAME = "quiz-patente-ab-v29";
+const CACHE_NAME = "quiz-patente-ab-v30";
 const CORE_ASSETS = [
   "./",
   "./index.html",
@@ -15,7 +15,9 @@ const CORE_ASSETS = [
   "./assets/icons/icon-192.png",
   "./assets/icons/icon-512.png",
 ];
-const PRECACHE_ASSETS = [...new Set([...CORE_ASSETS, ...(self.PATENTE_ASSETS || [])])];
+const PRECACHE_ASSETS = [
+  ...new Set([...CORE_ASSETS, ...(self.PATENTE_ASSETS || [])]),
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -31,7 +33,11 @@ self.addEventListener("activate", (event) => {
     caches
       .keys()
       .then((names) =>
-        Promise.all(names.filter((name) => name !== CACHE_NAME).map((name) => caches.delete(name))),
+        Promise.all(
+          names
+            .filter((name) => name !== CACHE_NAME)
+            .map((name) => caches.delete(name)),
+        ),
       )
       .then(() => self.clients.claim()),
   );
@@ -50,7 +56,10 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (url.origin === self.location.origin && url.pathname.startsWith("/_vercel/insights/")) {
+  if (
+    url.origin === self.location.origin &&
+    url.pathname.startsWith("/_vercel/insights/")
+  ) {
     event.respondWith(fetch(request));
     return;
   }

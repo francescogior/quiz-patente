@@ -29,7 +29,7 @@ test("account UI discloses the duration, consent, and legal pages", () => {
 
 test("service worker revision includes the legal pages", () => {
   const worker = read("service-worker.js");
-  assert.match(worker, /quiz-patente-ab-v29/);
+  assert.match(worker, /quiz-patente-ab-v30/);
   assert.match(worker, /\.\/terms\.html/);
   assert.match(worker, /\.\/refunds\.html/);
   assert.match(worker, /\.\/privacy\.html/);
@@ -41,7 +41,10 @@ test("checkout recovery is persisted and callback URLs bypass CacheStorage", () 
   const reset = read("api/plus-checkout-reset.js");
   assert.match(app, /PLUS_PENDING_SESSION_KEY/);
   assert.match(app, /PLUS_PENDING_CHECKOUT_URL_KEY/);
-  assert.match(app, /localStorage\.setItem\(PLUS_PENDING_SESSION_KEY, response\.sessionId\)/);
+  assert.match(
+    app,
+    /localStorage\.setItem\(PLUS_PENDING_SESSION_KEY, response\.sessionId\)/,
+  );
   assert.match(app, /Riapri lo stesso checkout/);
   const cancelledBranch = app.slice(
     app.indexOf('checkoutState === "cancelled"'),
@@ -82,7 +85,10 @@ test("new AI generations use atomic distributed quota slots and generation locks
   assert.match(usage, /claimFirstAvailableSlot/);
   assert.match(usage, /claimJson\(BUCKET, objectPath, payload\)/);
   assert.match(usage, /locks\/\$\{dateKey\}/);
-  assert.match(translation, /consumePlusGeneration\(user, "translation", cachePath\)/);
+  assert.match(
+    translation,
+    /consumePlusGeneration\(\s*user,\s*"translation",\s*cachePath,?\s*\)/,
+  );
   assert.match(explanation, /consumePlusGeneration\(/);
   assert.match(explanation, /`\$\{PROMPT_VERSION\}:\$\{question\.id\}`/);
 });

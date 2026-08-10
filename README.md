@@ -12,7 +12,10 @@ La banca dati viene dal Portale dell'Automobilista, sezione pubblica "Quiz per l
 
 Le domande grafiche senza associazione immagine sicura vengono escluse durante la generazione, per evitare schede con riferimenti a figure mancanti.
 
-La fonte ministeriale non include spiegazioni testuali per le singole risposte. Nel riepilogo l'app può generare spiegazioni AI, salvandole su Neon Postgres per riusarle senza rigenerarle.
+La fonte ministeriale non include spiegazioni testuali per le singole risposte. L’accesso
+anonimo offre una domanda dimostrativa; un account Free sblocca simulazioni complete in
+italiano, storico e ripasso; Quiz Patente Plus aggiunge spiegazioni AI e traduzioni. I
+contenuti generati vengono salvati per gli utenti Plus e riutilizzati senza rigenerarli.
 
 Con Neon e Resend configurati, l'app abilita anche un accesso passwordless via codice email e salva le simulazioni completate per mostrare i progressi dell'utente.
 

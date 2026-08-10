@@ -1,6 +1,8 @@
 const bank = window.PATENTE_QUESTION_BANK;
 
-const STORAGE_KEY = "quiz-patente-session-v1";
+const LEGACY_STORAGE_KEY = "quiz-patente-session-v1";
+const STORAGE_KEY_PREFIX = "quiz-patente-session-v2";
+const DEMO_STORAGE_KEY = "quiz-patente-demo-v1";
 const HISTORY_KEY = "quiz-patente-history-v1";
 const AUTH_TOKEN_KEY = "quiz-patente-auth-token-v1";
 const LANGUAGE_PREF_KEY = "quiz-patente-translation-language-v1";
@@ -15,15 +17,25 @@ const PLUS_PRODUCT = {
   priceCents: 399,
   returnUrl: "https://quizpatente.realb.it/",
 };
-const settings = bank?.settings ?? { examQuestions: 30, examMinutes: 20, maxErrors: 3 };
+const settings = bank?.settings ?? {
+  examQuestions: 30,
+  examMinutes: 20,
+  maxErrors: 3,
+};
 const allQuestions = bank?.questions ?? [];
-const questionsById = new Map(allQuestions.map((question) => [String(question.id), question]));
+const questionsById = new Map(
+  allQuestions.map((question) => [String(question.id), question]),
+);
 const explanationCache = new Map();
-const explanationTargets = new WeakMap();
-const pendingExplanationLoads = new Set();
+let explanationTargets = new WeakMap();
+const pendingExplanationLoads = new Map();
 const translationCache = new Map();
 const pendingTranslations = new Map();
-const ORIGINAL_LANGUAGE = { code: "it", label: "Italiano originale", custom: false };
+const ORIGINAL_LANGUAGE = {
+  code: "it",
+  label: "Italiano originale",
+  custom: false,
+};
 const PRESET_LANGUAGES = [
   ORIGINAL_LANGUAGE,
   { code: "en", label: "Inglese", custom: false },
@@ -37,7 +49,9 @@ const PRESET_LANGUAGES = [
 const els = {
   questionCounter: document.getElementById("questionCounter"),
   answeredCounter: document.getElementById("answeredCounter"),
+  thresholdLabel: document.getElementById("thresholdLabel"),
   threshold: document.getElementById("threshold"),
+  timerLabel: document.getElementById("timerLabel"),
   timer: document.getElementById("timer"),
   progressBar: document.getElementById("progressBar"),
   questionPanel: document.getElementById("questionPanel"),
@@ -46,6 +60,7 @@ const els = {
   questionImage: document.getElementById("questionImage"),
   questionLanguageControl: document.getElementById("questionLanguageControl"),
   questionLanguageSelect: document.getElementById("questionLanguageSelect"),
+  questionPlusButton: document.getElementById("questionPlusButton"),
   questionTopic: document.getElementById("questionTopic"),
   questionText: document.getElementById("questionText"),
   questionTranslation: document.getElementById("questionTranslation"),
@@ -55,6 +70,7 @@ const els = {
   prevButton: document.getElementById("prevButton"),
   nextButton: document.getElementById("nextButton"),
   finishButton: document.getElementById("finishButton"),
+  questionActions: document.getElementById("questionActions"),
   newExamButton: document.getElementById("newExamButton"),
   installButton: document.getElementById("installButton"),
   accountButton: document.getElementById("accountButton"),
@@ -72,8 +88,12 @@ const els = {
   errorCount: document.getElementById("errorCount"),
   usedTime: document.getElementById("usedTime"),
   reviewList: document.getElementById("reviewList"),
+  demoRegistrationCard: document.getElementById("demoRegistrationCard"),
+  demoRegisterButton: document.getElementById("demoRegisterButton"),
   modalBackdrop: document.getElementById("modalBackdrop"),
   accountPanel: document.getElementById("accountPanel"),
+  accountPanelKicker: document.getElementById("accountPanelKicker"),
+  accountPanelTitle: document.getElementById("accountPanelTitle"),
   closeAccountButton: document.getElementById("closeAccountButton"),
   authSignedOut: document.getElementById("authSignedOut"),
   authSignedIn: document.getElementById("authSignedIn"),
@@ -84,6 +104,7 @@ const els = {
   requestCodeButton: document.getElementById("requestCodeButton"),
   verifyCodeButton: document.getElementById("verifyCodeButton"),
   authStatus: document.getElementById("authStatus"),
+  authIntro: document.getElementById("authIntro"),
   accountEmail: document.getElementById("accountEmail"),
   signOutButton: document.getElementById("signOutButton"),
   profileTabs: document.getElementById("profileTabs"),
@@ -95,9 +116,14 @@ const els = {
   revisionSummary: document.getElementById("revisionSummary"),
   progressChart: document.getElementById("progressChart"),
   accountLanguageSelect: document.getElementById("accountLanguageSelect"),
+  translationSettings: document.getElementById("translationSettings"),
+  translationUpgrade: document.getElementById("translationUpgrade"),
+  translationPlusButton: document.getElementById("translationPlusButton"),
   customLanguageField: document.getElementById("customLanguageField"),
   customLanguageInput: document.getElementById("customLanguageInput"),
-  translationPreferenceStatus: document.getElementById("translationPreferenceStatus"),
+  translationPreferenceStatus: document.getElementById(
+    "translationPreferenceStatus",
+  ),
   plusStatus: document.getElementById("plusStatus"),
   plusConsentRow: document.getElementById("plusConsentRow"),
   plusConsent: document.getElementById("plusConsent"),
@@ -114,8 +140,13 @@ const els = {
   adminContent: document.getElementById("adminContent"),
 };
 
-let state = restoreSession() ?? createExam();
-let authState = { token: localStorage.getItem(AUTH_TOKEN_KEY), user: null, progress: null };
+let authState = {
+  token: localStorage.getItem(AUTH_TOKEN_KEY),
+  user: null,
+  progress: null,
+  restoring: Boolean(localStorage.getItem(AUTH_TOKEN_KEY)),
+};
+let state = restoreDemoSession() ?? createExam({ mode: "demo", count: 1 });
 let plusState = {
   token: null,
   active: false,
@@ -133,8 +164,10 @@ let timerId = 0;
 let deferredInstallPrompt = null;
 let drawerClosingTimer = 0;
 let accountClosingTimer = 0;
-let explanationObserver = null;
 let customLanguageTimer = 0;
+let authIntent = "default";
+let accessEpoch = 0;
+let accountReturnFocus = null;
 
 init();
 
@@ -156,6 +189,7 @@ function init() {
   els.accountButton.addEventListener("click", openAccountPanel);
   els.closeAccountButton.addEventListener("click", closeAccountPanel);
   els.modalBackdrop.addEventListener("click", closeAccountPanel);
+  els.accountPanel.addEventListener("keydown", trapAccountFocus);
   els.emailLoginForm.addEventListener("submit", requestLoginCode);
   els.codeLoginForm.addEventListener("submit", verifyLoginCode);
   els.loginCode.addEventListener("input", () => {
@@ -168,12 +202,23 @@ function init() {
     if (!tab || tab.hidden) return;
     setProfileView(tab.dataset.profileTab);
   });
-  els.questionLanguageSelect.addEventListener("change", handleQuestionLanguageChange);
-  els.accountLanguageSelect.addEventListener("change", handleAccountLanguageChange);
+  els.questionLanguageSelect.addEventListener(
+    "change",
+    handleQuestionLanguageChange,
+  );
+  els.accountLanguageSelect.addEventListener(
+    "change",
+    handleAccountLanguageChange,
+  );
   els.customLanguageInput.addEventListener("input", handleCustomLanguageInput);
+  els.questionPlusButton.addEventListener("click", openPlusPanel);
+  els.translationPlusButton.addEventListener("click", openPlusPanel);
+  els.demoRegisterButton.addEventListener("click", promptDemoRegistration);
   els.plusBuyButton.addEventListener("click", startPlusCheckout);
   els.plusResetButton.addEventListener("click", clearPendingPlusCheckout);
-  els.refreshAdminButton.addEventListener("click", () => loadAdminDashboard(true));
+  els.refreshAdminButton.addEventListener("click", () =>
+    loadAdminDashboard(true),
+  );
   els.adminTabs.addEventListener("click", (event) => {
     const tab = event.target.closest("[data-admin-view]");
     if (!tab) return;
@@ -232,12 +277,21 @@ function createExam(options = {}) {
   const now = Date.now();
   const mode = options.mode || "simulation";
   const fallbackId = crypto.randomUUID?.() ?? String(now);
-  const sourceQuestions = Array.isArray(options.questions) && options.questions.length > 0
-    ? options.questions
-    : allQuestions;
-  const questions = sample(sourceQuestions, options.count || settings.examQuestions);
+  const sourceQuestions =
+    Array.isArray(options.questions) && options.questions.length > 0
+      ? options.questions
+      : allQuestions;
+  const questions = sample(
+    sourceQuestions,
+    options.count ?? settings.examQuestions,
+  );
   return {
-    id: mode === "revision" ? `revision-${fallbackId}` : fallbackId,
+    id:
+      mode === "revision"
+        ? `revision-${fallbackId}`
+        : mode === "demo"
+          ? `demo-${fallbackId}`
+          : fallbackId,
     mode,
     questions,
     answers: Array.from({ length: questions.length }, () => null),
@@ -250,11 +304,33 @@ function createExam(options = {}) {
   };
 }
 
+function sessionStorageKey(userId = authState.user?.id) {
+  return userId ? `${STORAGE_KEY_PREFIX}:${userId}` : null;
+}
+
 function restoreSession() {
   try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null");
+    const key = sessionStorageKey();
+    if (!key) return null;
+    const saved = JSON.parse(localStorage.getItem(key) ?? "null");
     if (!saved || saved.finished || Date.now() >= saved.endsAt) return null;
-    if (!Array.isArray(saved.questions) || saved.questions.length === 0) return null;
+    if (saved.mode === "demo") return null;
+    if (!Array.isArray(saved.questions) || saved.questions.length === 0)
+      return null;
+    return saved;
+  } catch {
+    return null;
+  }
+}
+
+function restoreDemoSession() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(DEMO_STORAGE_KEY) ?? "null");
+    if (!saved || saved.mode !== "demo") return null;
+    if (!Array.isArray(saved.questions) || saved.questions.length !== 1)
+      return null;
+    if (!Array.isArray(saved.answers) || saved.answers.length !== 1)
+      return null;
     return saved;
   } catch {
     return null;
@@ -262,7 +338,9 @@ function restoreSession() {
 }
 
 function persistSession() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  const key = state.mode === "demo" ? DEMO_STORAGE_KEY : sessionStorageKey();
+  if (!key) return;
+  localStorage.setItem(key, JSON.stringify(state));
 }
 
 function restoreLanguagePreference() {
@@ -276,25 +354,40 @@ function restoreLanguagePreference() {
         custom: true,
       };
     }
-    return PRESET_LANGUAGES.find((language) => language.code === saved.code) || ORIGINAL_LANGUAGE;
+    return (
+      PRESET_LANGUAGES.find((language) => language.code === saved.code) ||
+      ORIGINAL_LANGUAGE
+    );
   } catch {
     return ORIGINAL_LANGUAGE;
   }
 }
 
 function persistLanguagePreference() {
-  localStorage.setItem(LANGUAGE_PREF_KEY, JSON.stringify(translationState.language));
+  localStorage.setItem(
+    LANGUAGE_PREF_KEY,
+    JSON.stringify(translationState.language),
+  );
 }
 
 function getActiveTranslationLanguage() {
   const language = translationState.language;
-  if (!authState.user || !language || language.code === "it") return null;
+  if (
+    !authState.user ||
+    !hasActivePlus() ||
+    !language ||
+    language.code === "it"
+  )
+    return null;
   if (language.custom && !language.label.trim()) return null;
   return language;
 }
 
 function isCustomLanguageSelected() {
-  return translationState.language?.custom || translationState.language?.code === "custom";
+  return (
+    translationState.language?.custom ||
+    translationState.language?.code === "custom"
+  );
 }
 
 function setTranslationLanguage(language, shouldRender = true) {
@@ -311,6 +404,10 @@ function setTranslationLanguage(language, shouldRender = true) {
 }
 
 function handleQuestionLanguageChange(event) {
+  if (!hasActivePlus()) {
+    openPlusPanel();
+    return;
+  }
   const selected = languageFromSelectValue(event.target.value);
   if (selected?.code === "custom" && !selected.label.trim()) {
     openAccountPanel();
@@ -324,13 +421,17 @@ function handleQuestionLanguageChange(event) {
 }
 
 function handleAccountLanguageChange(event) {
+  if (!hasActivePlus()) {
+    openPlusPanel();
+    return;
+  }
   const selected = languageFromSelectValue(event.target.value);
   if (selected?.code === "custom") {
     const label = els.customLanguageInput.value.trim();
     setTranslationLanguage({ code: "custom", label, custom: true }, false);
     els.customLanguageField.hidden = false;
     els.translationPreferenceStatus.textContent = label
-      ? `Usero ${label} come lingua di traduzione.`
+      ? `Userò ${label} come lingua di traduzione.`
       : "Scrivi il nome della lingua personalizzata.";
     if (!label) els.customLanguageInput.focus();
     if (label) setTranslationLanguage({ code: "custom", label, custom: true });
@@ -340,6 +441,7 @@ function handleAccountLanguageChange(event) {
 }
 
 function handleCustomLanguageInput() {
+  if (!hasActivePlus()) return;
   window.clearTimeout(customLanguageTimer);
   customLanguageTimer = window.setTimeout(() => {
     if (!isCustomLanguageSelected()) return;
@@ -352,37 +454,57 @@ function languageFromSelectValue(value) {
   if (value === "custom") {
     return {
       code: "custom",
-      label: translationState.language?.custom ? translationState.language.label : "",
+      label: translationState.language?.custom
+        ? translationState.language.label
+        : "",
       custom: true,
     };
   }
-  return PRESET_LANGUAGES.find((language) => language.code === value) || ORIGINAL_LANGUAGE;
+  return (
+    PRESET_LANGUAGES.find((language) => language.code === value) ||
+    ORIGINAL_LANGUAGE
+  );
 }
 
 function renderLanguageControls() {
   const isSignedIn = Boolean(authState.user);
-  els.questionLanguageControl.hidden = !isSignedIn;
-  populateLanguageSelect(els.questionLanguageSelect, { includeCustomPlaceholder: false });
-  populateLanguageSelect(els.accountLanguageSelect, { includeCustomPlaceholder: true });
+  const hasPlus = isSignedIn && hasActivePlus();
+  els.questionLanguageControl.hidden = !hasPlus;
+  els.questionPlusButton.hidden = !isSignedIn || hasPlus;
+  els.translationSettings.hidden = !hasPlus;
+  els.translationUpgrade.hidden = hasPlus;
+  populateLanguageSelect(els.questionLanguageSelect, {
+    includeCustomPlaceholder: false,
+  });
+  populateLanguageSelect(els.accountLanguageSelect, {
+    includeCustomPlaceholder: true,
+  });
 
-  const selectValue = isCustomLanguageSelected() ? "custom" : translationState.language.code;
+  const selectValue = isCustomLanguageSelected()
+    ? "custom"
+    : translationState.language.code;
   els.questionLanguageSelect.value = selectValue;
   els.accountLanguageSelect.value = selectValue;
-  els.customLanguageField.hidden = !isCustomLanguageSelected();
-  els.customLanguageInput.value = isCustomLanguageSelected() ? translationState.language.label : "";
+  els.customLanguageField.hidden = !hasPlus || !isCustomLanguageSelected();
+  els.customLanguageInput.value = isCustomLanguageSelected()
+    ? translationState.language.label
+    : "";
 
-  if (!isSignedIn) {
+  if (!hasPlus) {
     els.questionTranslation.hidden = true;
+    els.translatedQuestionText.textContent = "";
     return;
   }
 
   const activeLanguage = getActiveTranslationLanguage();
   if (!activeLanguage && isCustomLanguageSelected()) {
-    els.translationPreferenceStatus.textContent = "Scrivi il nome della lingua personalizzata.";
+    els.translationPreferenceStatus.textContent =
+      "Scrivi il nome della lingua personalizzata.";
   } else if (activeLanguage) {
     els.translationPreferenceStatus.textContent = `Le domande e le spiegazioni saranno tradotte in ${activeLanguage.label}.`;
   } else {
-    els.translationPreferenceStatus.textContent = "Mostro il testo ministeriale originale in italiano.";
+    els.translationPreferenceStatus.textContent =
+      "Mostro il testo ministeriale originale in italiano.";
   }
 }
 
@@ -399,9 +521,10 @@ function populateLanguageSelect(select, { includeCustomPlaceholder }) {
   if (includeCustomPlaceholder || translationState.language?.custom) {
     const option = document.createElement("option");
     option.value = "custom";
-    option.textContent = translationState.language?.custom && translationState.language.label
-      ? `Personalizzata: ${translationState.language.label}`
-      : "Lingua personalizzata...";
+    option.textContent =
+      translationState.language?.custom && translationState.language.label
+        ? `Personalizzata: ${translationState.language.label}`
+        : "Lingua personalizzata...";
     select.append(option);
   }
 
@@ -427,14 +550,26 @@ function renderQuestionTranslation(question) {
   }
 
   els.translatedQuestionText.textContent = "Traduco...";
-  loadTranslation(question, "").then((translation) => {
-    if (state.finished || state.questions[state.currentIndex]?.id !== question.id) return;
-    els.translatedQuestionText.textContent = translation.questionText;
-  }).catch((error) => {
-    if (state.finished || state.questions[state.currentIndex]?.id !== question.id) return;
-    els.translatedQuestionText.textContent =
-      error.message || "Traduzione non disponibile in questo momento.";
-  });
+  loadTranslation(question, "")
+    .then((translation) => {
+      if (
+        !getActiveTranslationLanguage() ||
+        state.finished ||
+        state.questions[state.currentIndex]?.id !== question.id
+      )
+        return;
+      els.translatedQuestionText.textContent = translation.questionText;
+    })
+    .catch((error) => {
+      if (
+        !getActiveTranslationLanguage() ||
+        state.finished ||
+        state.questions[state.currentIndex]?.id !== question.id
+      )
+        return;
+      els.translatedQuestionText.textContent =
+        error.message || "Traduzione non disponibile in questo momento.";
+    });
 }
 
 async function loadTranslation(question, explanation) {
@@ -450,7 +585,10 @@ async function loadTranslation(question, explanation) {
 
   const cacheKey = translationKey(question, explanation);
   if (translationCache.has(cacheKey)) return translationCache.get(cacheKey);
-  if (pendingTranslations.has(cacheKey)) return pendingTranslations.get(cacheKey);
+  if (pendingTranslations.has(cacheKey))
+    return pendingTranslations.get(cacheKey);
+  const requestUserId = authState.user?.id;
+  const requestEpoch = accessEpoch;
 
   const promise = authFetch("./api/translation", {
     method: "POST",
@@ -460,12 +598,20 @@ async function loadTranslation(question, explanation) {
       language,
       explanation,
     }),
-  }).then((response) => {
-    translationCache.set(cacheKey, response.translation);
-    return response.translation;
-  }).finally(() => {
-    pendingTranslations.delete(cacheKey);
-  });
+  })
+    .then((response) => {
+      if (
+        accessEpoch === requestEpoch &&
+        hasActivePlus() &&
+        authState.user?.id === requestUserId
+      ) {
+        translationCache.set(cacheKey, response.translation);
+      }
+      return response.translation;
+    })
+    .finally(() => {
+      if (accessEpoch === requestEpoch) pendingTranslations.delete(cacheKey);
+    });
 
   pendingTranslations.set(cacheKey, promise);
   return promise;
@@ -501,6 +647,10 @@ function sample(items, count) {
 }
 
 function render() {
+  if (authState.restoring) {
+    renderAuthLoading();
+    return;
+  }
   if (state.finished) {
     renderResults();
     return;
@@ -509,10 +659,20 @@ function render() {
   const question = state.questions[state.currentIndex];
   const answer = state.answers[state.currentIndex];
   const answeredCount = state.answers.filter((item) => item !== null).length;
+  const isDemo = state.mode === "demo";
 
   els.questionPanel.hidden = false;
   els.examControls.hidden = false;
+  els.newExamButton.disabled = false;
   els.resultsPanel.hidden = true;
+  els.questionPanel.classList.remove("auth-loading-panel");
+  els.demoRegistrationCard.hidden = true;
+  els.questionActions.hidden = isDemo;
+  els.questionDrawerButton.hidden = isDemo;
+  els.thresholdLabel.textContent = isDemo ? "Accesso" : "Soglia";
+  els.threshold.textContent = isDemo ? "Demo" : `${settings.maxErrors} errori`;
+  els.timerLabel.textContent = "Tempo";
+  els.newExamButton.textContent = authState.user ? "Nuovo test" : "Registrati";
   els.questionPanel.classList.toggle("has-media", Boolean(question.image));
   els.questionPanel.classList.toggle("no-media", !question.image);
   els.questionPanel.classList.toggle("has-answer", answer !== null);
@@ -536,17 +696,42 @@ function render() {
   }
 
   els.answerButtons.forEach((button) => {
-    button.classList.toggle("selected", answer === (button.dataset.answer === "true"));
+    button.classList.toggle(
+      "selected",
+      answer === (button.dataset.answer === "true"),
+    );
   });
 
   els.prevButton.disabled = state.currentIndex === 0;
   els.nextButton.disabled = state.currentIndex === state.questions.length - 1;
   els.finishButton.classList.toggle(
     "finish-ready",
-    state.currentIndex === state.questions.length - 1 && state.answers[state.currentIndex] !== null,
+    state.currentIndex === state.questions.length - 1 &&
+      state.answers[state.currentIndex] !== null,
   );
   renderDots();
   tickTimer();
+}
+
+function renderAuthLoading() {
+  els.questionPanel.hidden = false;
+  els.examControls.hidden = true;
+  els.resultsPanel.hidden = true;
+  els.newExamButton.disabled = true;
+  els.questionDrawerButton.hidden = true;
+  els.questionMedia.hidden = true;
+  els.questionTranslation.hidden = true;
+  els.questionPanel.classList.remove("has-media", "has-answer");
+  els.questionPanel.classList.add("no-media", "auth-loading-panel");
+  els.questionTopic.textContent = "Account";
+  els.questionText.textContent = "Ripristino il tuo accesso...";
+  els.questionCounter.textContent = "—";
+  els.answeredCounter.textContent = "—";
+  els.timer.textContent = "—";
+  els.timerLabel.textContent = "Stato";
+  els.thresholdLabel.textContent = "Stato";
+  els.threshold.textContent = "Accesso";
+  els.progressBar.style.width = "0%";
 }
 
 function renderDots() {
@@ -577,6 +762,10 @@ function createDotButton(index, closesDrawer = false) {
 
 function answerCurrentQuestion(value) {
   state.answers[state.currentIndex] = value;
+  if (state.mode === "demo") {
+    finishExam("demo");
+    return;
+  }
   if (state.currentIndex < state.questions.length - 1) {
     state.currentIndex += 1;
   }
@@ -585,7 +774,10 @@ function answerCurrentQuestion(value) {
 }
 
 function isTypingTarget(target) {
-  return ["INPUT", "SELECT", "TEXTAREA"].includes(target?.tagName) || target?.isContentEditable;
+  return (
+    ["INPUT", "SELECT", "TEXTAREA"].includes(target?.tagName) ||
+    target?.isContentEditable
+  );
 }
 
 function openQuestionDrawer() {
@@ -613,7 +805,14 @@ function setDrawerExpanded(isExpanded) {
 }
 
 function startNewExam() {
-  if (hasActiveExamProgress() && !window.confirm("Vuoi abbandonare il test in corso e iniziarne uno nuovo?")) {
+  if (!authState.user) {
+    promptDemoRegistration();
+    return;
+  }
+  if (
+    hasActiveExamProgress() &&
+    !window.confirm("Vuoi abbandonare il test in corso e iniziarne uno nuovo?")
+  ) {
     return;
   }
 
@@ -634,7 +833,10 @@ function startRevisionExam() {
     return;
   }
 
-  if (hasActiveExamProgress() && !window.confirm("Vuoi abbandonare il test in corso e iniziare un ripasso?")) {
+  if (
+    hasActiveExamProgress() &&
+    !window.confirm("Vuoi abbandonare il test in corso e iniziare un ripasso?")
+  ) {
     return;
   }
 
@@ -667,7 +869,12 @@ function moveBy(delta) {
 }
 
 function tickTimer() {
+  reconcilePlusExpiry();
   if (state.finished) return;
+  if (state.mode === "demo") {
+    els.timer.textContent = "Libero";
+    return;
+  }
   const remaining = Math.max(0, state.endsAt - Date.now());
   els.timer.textContent = formatDuration(remaining);
   if (remaining === 0) finishExam("timeout");
@@ -678,9 +885,16 @@ function finishExam(reason) {
   state.finished = true;
   state.finishedAt = Date.now();
   state.finishReason = reason;
+  if (state.mode === "demo") {
+    persistSession();
+    renderResults();
+    window.setTimeout(promptDemoRegistration, 180);
+    return;
+  }
   persistResult();
   syncFinishedExam();
-  localStorage.removeItem(STORAGE_KEY);
+  const key = sessionStorageKey();
+  if (key) localStorage.removeItem(key);
   renderResults();
 }
 
@@ -692,30 +906,58 @@ function calculateResult() {
   return {
     errors,
     correct,
-    passed: errors <= settings.maxErrors,
+    passed: state.mode === "demo" ? errors === 0 : errors <= settings.maxErrors,
     usedMs: Math.max(0, (state.finishedAt ?? Date.now()) - state.startedAt),
   };
 }
 
 function renderResults() {
   const result = calculateResult();
+  const isDemo = state.mode === "demo";
   els.questionPanel.hidden = true;
   els.examControls.hidden = true;
   els.resultsPanel.hidden = false;
+  els.newExamButton.disabled = false;
+  els.questionActions.hidden = isDemo;
+  els.questionDrawerButton.hidden = isDemo;
+  els.demoRegistrationCard.hidden = !isDemo;
+  els.thresholdLabel.textContent = isDemo ? "Accesso" : "Soglia";
+  els.threshold.textContent = isDemo ? "Demo" : `${settings.maxErrors} errori`;
+  els.timerLabel.textContent = "Tempo";
+  els.newExamButton.textContent = authState.user ? "Nuovo test" : "Registrati";
   closeQuestionDrawer();
   els.progressBar.style.width = "100%";
   els.questionCounter.textContent = `${state.questions.length}/${state.questions.length}`;
   els.answeredCounter.textContent = `${state.answers.filter((item) => item !== null).length}/${state.questions.length}`;
-  els.timer.textContent = formatDuration(Math.max(0, state.endsAt - (state.finishedAt ?? Date.now())));
+  els.timer.textContent = isDemo
+    ? "Libero"
+    : formatDuration(
+        Math.max(0, state.endsAt - (state.finishedAt ?? Date.now())),
+      );
   els.finishButton.classList.remove("finish-ready");
-  els.resultLabel.textContent = result.passed ? "Promosso" : "Respinto";
-  if (state.mode === "revision") {
+  els.resultLabel.textContent = isDemo
+    ? result.passed
+      ? "Risposta corretta"
+      : "Risposta da rivedere"
+    : result.passed
+      ? "Promosso"
+      : "Respinto";
+  if (isDemo) {
+    els.resultTitle.textContent = "Demo completata";
+  } else if (state.mode === "revision") {
     els.resultLabel.textContent = "Ripasso";
-    els.resultTitle.textContent = result.errors === 0 ? "Errori sistemati" : "Ripasso completato";
+    els.resultTitle.textContent =
+      result.errors === 0 ? "Errori sistemati" : "Ripasso completato";
   } else {
-    els.resultTitle.textContent = result.passed ? "Scheda superata" : "Troppi errori";
+    els.resultTitle.textContent = result.passed
+      ? "Scheda superata"
+      : "Troppi errori";
   }
-  els.resultScore.textContent = `${result.errors} ${result.errors === 1 ? "errore" : "errori"}`;
+  els.resultScore.textContent = isDemo
+    ? result.passed
+      ? "Hai risposto correttamente"
+      : "La risposta corretta è indicata sotto"
+    : `${result.errors} ${result.errors === 1 ? "errore" : "errori"}`;
   els.correctCount.textContent = String(result.correct);
   els.errorCount.textContent = String(result.errors);
   els.usedTime.textContent = formatDuration(result.usedMs);
@@ -724,8 +966,10 @@ function renderResults() {
 
 function renderReviewList() {
   els.reviewList.innerHTML = "";
-  explanationObserver?.disconnect();
-  explanationObserver = null;
+
+  if (state.mode !== "demo" && authState.user && !hasActivePlus()) {
+    els.reviewList.append(createPlusUpgradePanel());
+  }
 
   state.questions.forEach((question, index) => {
     const answer = state.answers[index];
@@ -746,7 +990,8 @@ function renderReviewList() {
 
     const status = document.createElement("span");
     status.className = `result-pill ${isCorrect ? "result-pill-correct" : "result-pill-error"}`;
-    status.textContent = answer === null ? "Non risposta" : isCorrect ? "Corretta" : "Incorretta";
+    status.textContent =
+      answer === null ? "Non risposta" : isCorrect ? "Corretta" : "Incorretta";
 
     const comparison = document.createElement("div");
     comparison.className = "answer-comparison";
@@ -778,11 +1023,38 @@ function renderReviewList() {
     const translatedQuestion = createTranslatedQuestionPanel(question);
     if (translatedQuestion) textGroup.append(translatedQuestion);
 
-    const explanation = createAiExplanationPanel(question, answer, { collapsed: isCorrect });
-
-    item.append(textGroup, explanation);
+    item.append(textGroup);
+    if (hasActivePlus()) {
+      const explanation = createAiExplanationPanel(question, answer);
+      item.append(explanation);
+    }
     els.reviewList.append(item);
   });
+}
+
+function createPlusUpgradePanel() {
+  const panel = document.createElement("section");
+  panel.className = "tier-upgrade-card";
+
+  const kicker = document.createElement("span");
+  kicker.className = "plus-kicker";
+  kicker.textContent = "Quiz Patente Plus";
+
+  const title = document.createElement("h3");
+  title.textContent = "Vuoi capire perché hai sbagliato?";
+
+  const copy = document.createElement("p");
+  copy.textContent =
+    "Con Plus sblocchi le spiegazioni di ogni risposta e le traduzioni delle domande.";
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "primary-button";
+  button.textContent = "Scopri Plus";
+  button.addEventListener("click", openPlusPanel);
+
+  panel.append(kicker, title, copy, button);
+  return panel;
 }
 
 function createAnswerPill(label, value, isCorrect, isMissing = false) {
@@ -799,15 +1071,13 @@ function createAnswerPill(label, value, isCorrect, isMissing = false) {
   return pill;
 }
 
-function createAiExplanationPanel(question, answer, options = {}) {
-  const shouldCollapse = Boolean(options.collapsed);
-  const panel = document.createElement(shouldCollapse ? "details" : "section");
-  panel.className = "ai-explanation";
-  panel.classList.toggle("ai-explanation-collapsible", shouldCollapse);
+function createAiExplanationPanel(question, answer) {
+  const panel = document.createElement("details");
+  panel.className = "ai-explanation ai-explanation-collapsible";
   panel.dataset.questionId = String(question.id);
-  if (shouldCollapse) panel.dataset.lazyExplanation = "true";
+  panel.dataset.lazyExplanation = "true";
 
-  const header = document.createElement(shouldCollapse ? "summary" : "div");
+  const header = document.createElement("summary");
   header.className = "ai-explanation-header";
 
   const title = document.createElement("div");
@@ -821,31 +1091,25 @@ function createAiExplanationPanel(question, answer, options = {}) {
   const body = document.createElement("div");
   body.className = "ai-explanation-body";
 
-  header.append(title);
-  if (shouldCollapse) header.append(hint);
+  header.append(title, hint);
   panel.append(header, body);
 
   const cached = explanationCache.get(question.id);
   if (cached) {
     panel.dataset.explanationLoaded = "true";
     renderAiExplanationBody(body, question, answer, cached);
-  } else if (shouldCollapse) {
+  } else {
     renderExplanationPrompt(body);
     explanationTargets.set(panel, { question, answer });
-  } else {
-    renderExplanationSkeleton(body);
-    observeExplanationPanel(panel, question, answer);
   }
 
-  if (shouldCollapse) {
+  updateExplanationToggleHint(panel, hint);
+  panel.addEventListener("toggle", () => {
     updateExplanationToggleHint(panel, hint);
-    panel.addEventListener("toggle", () => {
-      updateExplanationToggleHint(panel, hint);
-      if (!panel.open || panel.dataset.explanationLoaded === "true") return;
-      renderExplanationSkeleton(body);
-      loadExplanationPanel(panel);
-    });
-  }
+    if (!panel.open || panel.dataset.explanationLoaded === "true") return;
+    renderExplanationSkeleton(body);
+    loadExplanationPanel(panel);
+  });
 
   return panel;
 }
@@ -864,7 +1128,10 @@ function renderAiExplanationBody(body, question, answer, explanation) {
   explanationText.className = "single-explanation";
   explanationText.textContent = cleanExplanationText(correctExplanation);
 
-  const translatedExplanation = createTranslatedExplanationPanel(question, correctExplanation);
+  const translatedExplanation = createTranslatedExplanationPanel(
+    question,
+    correctExplanation,
+  );
 
   const reportButton = document.createElement("button");
   reportButton.className = "report-button";
@@ -899,11 +1166,14 @@ function createTranslatedExplanationPanel(question, explanation) {
 
   panel.append(label, text);
 
-  loadTranslation(question, cleanExplanationText(explanation)).then((translation) => {
-    text.textContent = translation.explanation || translation.questionText;
-  }).catch((error) => {
-    text.textContent = error.message || "Traduzione non disponibile in questo momento.";
-  });
+  loadTranslation(question, cleanExplanationText(explanation))
+    .then((translation) => {
+      text.textContent = translation.explanation || translation.questionText;
+    })
+    .catch((error) => {
+      text.textContent =
+        error.message || "Traduzione non disponibile in questo momento.";
+    });
 
   return panel;
 }
@@ -923,17 +1193,22 @@ function createTranslatedQuestionPanel(question) {
 
   panel.append(label, text);
 
-  loadTranslation(question, "").then((translation) => {
-    text.textContent = translation.questionText;
-  }).catch((error) => {
-    text.textContent = error.message || "Traduzione non disponibile in questo momento.";
-  });
+  loadTranslation(question, "")
+    .then((translation) => {
+      text.textContent = translation.questionText;
+    })
+    .catch((error) => {
+      text.textContent =
+        error.message || "Traduzione non disponibile in questo momento.";
+    });
 
   return panel;
 }
 
 function cleanExplanationText(text) {
-  return String(text || "").replace(/^(vero|falso)\s*[:.-]\s*/i, "").trim();
+  return String(text || "")
+    .replace(/^(vero|falso)\s*[:.-]\s*/i, "")
+    .trim();
 }
 
 function renderExplanationSkeleton(body) {
@@ -958,60 +1233,71 @@ function updateExplanationToggleHint(panel, hint) {
   hint.textContent = panel.open ? "Nascondi" : "Mostra";
 }
 
-function observeExplanationPanel(panel, question, answer) {
-  explanationTargets.set(panel, { question, answer });
-  if (!("IntersectionObserver" in window)) {
-    window.setTimeout(() => loadExplanationPanel(panel), 0);
-    return;
-  }
-  if (!explanationObserver) {
-    explanationObserver = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (!entry.isIntersecting) return;
-          explanationObserver.unobserve(entry.target);
-          loadExplanationPanel(entry.target);
-        });
-      },
-      { rootMargin: "180px 0px" },
-    );
-  }
-  explanationObserver.observe(panel);
-}
-
 async function loadExplanationPanel(panel) {
   const target = explanationTargets.get(panel);
   if (
     !target ||
-    panel.dataset.explanationLoaded === "true" ||
-    pendingExplanationLoads.has(target.question.id)
+    !hasActivePlus() ||
+    panel.dataset.explanationLoaded === "true"
   ) {
     return;
   }
   const body = panel.querySelector(".ai-explanation-body");
-  pendingExplanationLoads.add(target.question.id);
+  const requestEpoch = accessEpoch;
+  const requestUserId = authState.user?.id;
+  const questionId = target.question.id;
+  let request = pendingExplanationLoads.get(questionId);
+
+  if (!request) {
+    request = authFetch("./api/explanation", {
+      method: "POST",
+      headers: plusHeaders(),
+      body: JSON.stringify({ questionId }),
+    })
+      .then((response) => {
+        if (
+          accessEpoch === requestEpoch &&
+          hasActivePlus() &&
+          authState.user?.id === requestUserId
+        ) {
+          explanationCache.set(questionId, response.explanation);
+        }
+        return response.explanation;
+      })
+      .finally(() => {
+        if (pendingExplanationLoads.get(questionId) === request) {
+          pendingExplanationLoads.delete(questionId);
+        }
+      });
+    pendingExplanationLoads.set(questionId, request);
+  }
 
   try {
-    const response = await fetchJson("./api/explanation", {
-      method: "POST",
-      headers: {
-        ...(authState.token ? { Authorization: `Bearer ${authState.token}` } : {}),
-        ...plusHeaders(),
-      },
-      body: JSON.stringify({ questionId: target.question.id }),
-    });
-    explanationCache.set(target.question.id, response.explanation);
+    const explanation = await request;
+    if (
+      accessEpoch !== requestEpoch ||
+      !hasActivePlus() ||
+      authState.user?.id !== requestUserId ||
+      !panel.isConnected
+    ) {
+      return;
+    }
     panel.dataset.explanationLoaded = "true";
-    renderAiExplanationBody(body, target.question, target.answer, response.explanation);
+    renderAiExplanationBody(body, target.question, target.answer, explanation);
   } catch (error) {
+    if (
+      accessEpoch !== requestEpoch ||
+      !hasActivePlus() ||
+      !panel.isConnected ||
+      error.stale
+    )
+      return;
     body.innerHTML = "";
     const message = document.createElement("p");
     message.className = "ai-status ai-status-error";
     message.textContent =
       error.message || "Spiegazione non disponibile in questo momento.";
     body.append(message);
-  } finally {
-    pendingExplanationLoads.delete(target.question.id);
   }
 }
 
@@ -1087,36 +1373,54 @@ async function initAuth() {
   renderAuth();
   if (!authState.token) {
     const params = new URLSearchParams(window.location.search);
-    const fragment = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const fragment = new URLSearchParams(
+      window.location.hash.replace(/^#/, ""),
+    );
     if (params.has("checkout") || fragment.has("plus_token")) {
       openAccountPanel();
-      setAuthStatus("Accedi per completare l’attivazione di Quiz Patente Plus.");
+      setAuthStatus(
+        "Accedi per completare l’attivazione di Quiz Patente Plus.",
+      );
+    } else if (state.mode === "demo" && state.finished) {
+      window.setTimeout(promptDemoRegistration, 180);
     }
     return;
   }
 
+  const requestContext = captureAuthContext();
   try {
     const response = await authFetch("./api/auth-me");
     authState.user = response.user;
     authState.progress = response.progress;
+    authState.restoring = false;
     plusState.token = storedPlusTokenForUser(response.user.id);
+    enterAuthenticatedExperience();
     renderAuth();
     await syncPlusAccessFromLocation();
-  } catch {
+  } catch (error) {
+    if (error.stale || !isCurrentAuthContext(requestContext)) return;
     localStorage.removeItem(AUTH_TOKEN_KEY);
-    authState = { token: null, user: null, progress: null };
+    authState = { token: null, user: null, progress: null, restoring: false };
     adminState = { data: null, view: "users", loading: false, error: "" };
+    clearPremiumContentCaches();
     renderAuth();
+    render();
+    if (state.mode === "demo" && state.finished) {
+      window.setTimeout(promptDemoRegistration, 180);
+    }
   }
 }
 
 function openAccountPanel() {
   window.clearTimeout(accountClosingTimer);
+  if (els.accountPanel.hidden) accountReturnFocus = document.activeElement;
   els.accountPanel.hidden = false;
   els.modalBackdrop.hidden = false;
   requestAnimationFrame(() => {
     document.body.classList.add("account-open");
+    window.setTimeout(focusAccountPanel, 80);
   });
+  renderAccountPanelCopy();
   if (authState.user) {
     loadProgress();
     if (authState.user.isAdmin) loadAdminDashboard();
@@ -1129,7 +1433,83 @@ function closeAccountPanel() {
   accountClosingTimer = window.setTimeout(() => {
     els.accountPanel.hidden = true;
     els.modalBackdrop.hidden = true;
+    authIntent = "default";
+    if (accountReturnFocus?.isConnected) accountReturnFocus.focus();
+    accountReturnFocus = null;
   }, 260);
+}
+
+function focusAccountPanel() {
+  const target = authState.user
+    ? els.profileTabs.querySelector(".profile-tab.active") ||
+      els.closeAccountButton
+    : els.codeLoginForm.hidden
+      ? els.loginEmail
+      : els.loginCode;
+  target?.focus();
+}
+
+function trapAccountFocus(event) {
+  if (event.key !== "Tab" || els.accountPanel.hidden) return;
+  const focusable = [
+    ...els.accountPanel.querySelectorAll(
+      "button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href]",
+    ),
+  ].filter((element) => !element.hidden && element.getClientRects().length > 0);
+  if (focusable.length === 0) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
+function promptDemoRegistration() {
+  if (authState.user) return;
+  authIntent = "demo";
+  openAccountPanel();
+  accountReturnFocus = els.demoRegisterButton;
+}
+
+function openPlusPanel() {
+  if (!authState.user) {
+    promptDemoRegistration();
+    return;
+  }
+  authIntent = "default";
+  setProfileView("plus");
+  openAccountPanel();
+}
+
+function renderAccountPanelCopy() {
+  if (authState.user) {
+    els.accountPanelKicker.textContent = hasActivePlus()
+      ? "Account Plus"
+      : "Account Free";
+    els.accountPanelTitle.textContent = "Profilo";
+    return;
+  }
+  const fromDemo = authIntent === "demo";
+  els.accountPanelKicker.textContent = fromDemo ? "Demo completata" : "Account";
+  els.accountPanelTitle.textContent = fromDemo
+    ? "Continua gratis"
+    : "Accedi o registrati";
+  els.authIntro.textContent = fromDemo
+    ? "Inserisci la tua email per iniziare le simulazioni complete in italiano. Ti invieremo un codice a sei cifre."
+    : "Inserisci la tua email: ti invieremo un codice di accesso a sei cifre.";
+}
+
+function enterAuthenticatedExperience() {
+  state = restoreSession() ?? createExam();
+  localStorage.removeItem(LEGACY_STORAGE_KEY);
+  localStorage.removeItem(DEMO_STORAGE_KEY);
+  persistSession();
+  closeQuestionDrawer();
+  render();
 }
 
 async function requestLoginCode(event) {
@@ -1168,6 +1548,7 @@ async function verifyLoginCode(event) {
   setAuthStatus("Verifica...");
 
   try {
+    const cameFromDemo = state.mode === "demo";
     const response = await fetchJson("./api/auth-verify", {
       method: "POST",
       body: JSON.stringify({ email, code }),
@@ -1175,14 +1556,19 @@ async function verifyLoginCode(event) {
     authState.token = response.token;
     authState.user = response.user;
     authState.progress = response.progress;
+    authState.restoring = false;
     plusState.token = storedPlusTokenForUser(response.user.id);
     adminState = { data: null, view: "users", loading: false, error: "" };
     localStorage.setItem(AUTH_TOKEN_KEY, response.token);
     els.loginCode.value = "";
     setAuthStatus("");
+    enterAuthenticatedExperience();
     renderAuth();
     await syncPlusAccessFromLocation();
-    await syncFinishedExam();
+    if (cameFromDemo) {
+      accountReturnFocus = els.questionPanel;
+      closeAccountPanel();
+    }
   } catch (error) {
     setAuthStatus(error.message || "Codice non valido.");
   } finally {
@@ -1192,19 +1578,7 @@ async function verifyLoginCode(event) {
 
 async function signOut() {
   const token = authState.token;
-  authState = { token: null, user: null, progress: null };
-  plusState = {
-    token: null,
-    active: false,
-    expiresAt: null,
-    loading: false,
-    message: "",
-    recoverable: false,
-    pendingSession: localStorage.getItem(PLUS_PENDING_SESSION_KEY),
-  };
-  adminState = { data: null, view: "users", loading: false, error: "" };
-  localStorage.removeItem(AUTH_TOKEN_KEY);
-  renderAuth();
+  resetToAnonymousDemo();
   if (!token) return;
 
   try {
@@ -1217,9 +1591,59 @@ async function signOut() {
   }
 }
 
+function resetToAnonymousDemo() {
+  const previousUserId = authState.user?.id;
+  authState = { token: null, user: null, progress: null, restoring: false };
+  plusState = {
+    token: null,
+    active: false,
+    expiresAt: null,
+    loading: false,
+    message: "",
+    recoverable: false,
+    pendingSession: null,
+    pendingCheckoutUrl: null,
+  };
+  adminState = { data: null, view: "users", loading: false, error: "" };
+  if (previousUserId) removePlusTokenForUser(previousUserId);
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+  localStorage.removeItem(DEMO_STORAGE_KEY);
+  localStorage.removeItem(PLUS_PENDING_SESSION_KEY);
+  localStorage.removeItem(PLUS_PENDING_CHECKOUT_URL_KEY);
+  clearPremiumContentCaches();
+  state = createExam({ mode: "demo", count: 1 });
+  persistSession();
+  closeQuestionDrawer();
+  closeAccountPanel();
+  renderAuth();
+  render();
+}
+
+function downgradeToFree(message) {
+  const userId = authState.user?.id;
+  plusState.active = false;
+  plusState.expiresAt = null;
+  plusState.token = null;
+  plusState.recoverable = false;
+  plusState.message = message || "Quiz Patente Plus non è attivo.";
+  if (userId) removePlusTokenForUser(userId);
+  clearPremiumContentCaches();
+  renderAuth();
+  render();
+  if (authState.user) openPlusPanel();
+}
+
 function renderAuth() {
   const isSignedIn = Boolean(authState.user);
-  els.accountButton.textContent = isSignedIn ? (plusState.active ? "Plus · Profilo" : "Profilo") : "Accedi";
+  els.accountButton.disabled = authState.restoring;
+  els.accountButton.textContent = authState.restoring
+    ? "Carico..."
+    : isSignedIn
+      ? hasActivePlus()
+        ? "Plus · Profilo"
+        : "Profilo"
+      : "Accedi";
+  renderAccountPanelCopy();
   els.authSignedOut.hidden = isSignedIn;
   els.authSignedIn.hidden = !isSignedIn;
   els.profileAdminTab.hidden = !authState.user?.isAdmin;
@@ -1285,7 +1709,9 @@ function renderProfileView() {
 
   els.authSignedIn.querySelectorAll("[data-profile-view]").forEach((panel) => {
     const isAdminPanel = panel.dataset.profileView === "admin";
-    panel.hidden = panel.dataset.profileView !== profileView || (isAdminPanel && !authState.user?.isAdmin);
+    panel.hidden =
+      panel.dataset.profileView !== profileView ||
+      (isAdminPanel && !authState.user?.isAdmin);
   });
 }
 
@@ -1293,10 +1719,41 @@ function plusHeaders() {
   return plusState.token ? { "X-Quizpatente-Plus": plusState.token } : {};
 }
 
+function hasActivePlus() {
+  const expiresAt = new Date(plusState.expiresAt || "").getTime();
+  return Boolean(
+    plusState.active && Number.isFinite(expiresAt) && expiresAt > Date.now(),
+  );
+}
+
+function clearPremiumContentCaches() {
+  accessEpoch += 1;
+  explanationCache.clear();
+  translationCache.clear();
+  pendingExplanationLoads.clear();
+  pendingTranslations.clear();
+  explanationTargets = new WeakMap();
+}
+
+function reconcilePlusExpiry() {
+  if (!plusState.active || hasActivePlus()) return;
+  const userId = authState.user?.id;
+  plusState.active = false;
+  plusState.expiresAt = null;
+  plusState.token = null;
+  plusState.message = "Il pass Plus è scaduto.";
+  if (userId) removePlusTokenForUser(userId);
+  clearPremiumContentCaches();
+  renderAuth();
+  render();
+}
+
 function readPlusTokenMap() {
   try {
     const value = JSON.parse(localStorage.getItem(PLUS_TOKENS_KEY) || "{}");
-    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+    return value && typeof value === "object" && !Array.isArray(value)
+      ? value
+      : {};
   } catch {
     return {};
   }
@@ -1304,7 +1761,10 @@ function readPlusTokenMap() {
 
 function storedPlusTokenForUser(userId) {
   if (!userId) return null;
-  return readPlusTokenMap()[String(userId)] || localStorage.getItem(PLUS_TOKEN_LEGACY_KEY);
+  return (
+    readPlusTokenMap()[String(userId)] ||
+    localStorage.getItem(PLUS_TOKEN_LEGACY_KEY)
+  );
 }
 
 function storePlusTokenForUser(userId, token) {
@@ -1338,6 +1798,7 @@ function storedStripeCheckoutUrl() {
 
 async function syncPlusAccessFromLocation() {
   if (!authState.user || !authState.token) return;
+  const requestContext = captureAuthContext();
 
   const url = new URL(window.location.href);
   const fragment = new URLSearchParams(url.hash.replace(/^#/, ""));
@@ -1353,6 +1814,7 @@ async function syncPlusAccessFromLocation() {
     const previousToken = plusState.token;
     plusState.token = importedToken;
     const imported = await refreshPlusAccess({ persistOnSuccess: true });
+    if (imported.stale || !isCurrentAuthContext(requestContext)) return;
     if (!imported.checked) {
       plusState.token = importedToken;
       plusState.active = false;
@@ -1364,7 +1826,11 @@ async function syncPlusAccessFromLocation() {
       plusState.expiresAt = null;
       plusState.recoverable = false;
       if (previousToken) {
-        await refreshPlusAccess({ persistOnSuccess: true, removeInvalid: true });
+        await refreshPlusAccess({
+          persistOnSuccess: true,
+          removeInvalid: true,
+        });
+        if (!isCurrentAuthContext(requestContext)) return;
       }
     }
     plusState.message = imported.active
@@ -1384,8 +1850,10 @@ async function syncPlusAccessFromLocation() {
     renderPlus();
   } else if (checkoutState === "success" || plusState.pendingSession) {
     await activatePlusCheckout(plusState.pendingSession);
+    if (!isCurrentAuthContext(requestContext)) return;
   } else {
     await refreshPlusAccess({ persistOnSuccess: true, removeInvalid: true });
+    if (!isCurrentAuthContext(requestContext)) return;
   }
 
   if (importedToken || checkoutState || returnedSession) {
@@ -1397,50 +1865,77 @@ async function syncPlusAccessFromLocation() {
   }
 }
 
-async function refreshPlusAccess({ persistOnSuccess = false, removeInvalid = false } = {}) {
+async function refreshPlusAccess({
+  persistOnSuccess = false,
+  removeInvalid = false,
+} = {}) {
   if (!authState.user) {
     plusState.active = false;
     plusState.expiresAt = null;
     plusState.recoverable = false;
-    renderPlus();
+    clearPremiumContentCaches();
+    renderAuth();
+    render();
     return { checked: true, active: false };
   }
 
+  const requestContext = captureAccessContext();
   try {
     const response = await authFetch("./api/plus-status", {
       headers: plusHeaders(),
     });
+    if (!isCurrentAccessContext(requestContext)) {
+      return { checked: false, active: false, stale: true };
+    }
     if (response.token) plusState.token = response.token;
     plusState.active = Boolean(response.access?.active);
     plusState.expiresAt = response.access?.expiresAt || null;
     plusState.recoverable = false;
-    if (plusState.active && plusState.token && (persistOnSuccess || response.token)) {
-      storePlusTokenForUser(authState.user.id, plusState.token);
+    if (
+      hasActivePlus() &&
+      plusState.token &&
+      (persistOnSuccess || response.token)
+    ) {
+      storePlusTokenForUser(requestContext.userId, plusState.token);
     }
-    if (!plusState.active) {
+    if (!hasActivePlus()) {
+      clearPremiumContentCaches();
       if (removeInvalid) {
-        removePlusTokenForUser(authState.user.id);
+        removePlusTokenForUser(requestContext.userId);
         plusState.token = null;
       }
     }
     renderAuth();
-    return { checked: true, active: plusState.active };
+    render();
+    return { checked: true, active: hasActivePlus() };
   } catch (error) {
+    if (
+      error.stale ||
+      error.accessHandled ||
+      !isCurrentAccessContext(requestContext)
+    ) {
+      return { checked: false, active: false, stale: true };
+    }
     plusState.active = false;
+    plusState.expiresAt = null;
     plusState.recoverable = true;
     plusState.message = error.message || "Non riesco a verificare Plus ora.";
+    clearPremiumContentCaches();
     renderAuth();
+    render();
     return { checked: false, active: false };
   }
 }
 
 async function activatePlusCheckout(sessionId) {
   if (!sessionId) {
-    plusState.message = "Riferimento del pagamento mancante. Contatta l’assistenza.";
+    plusState.message =
+      "Riferimento del pagamento mancante. Contatta l’assistenza.";
     plusState.recoverable = false;
     renderPlus();
     return false;
   }
+  const requestContext = captureAccessContext();
   plusState.loading = true;
   plusState.pendingSession = sessionId;
   localStorage.setItem(PLUS_PENDING_SESSION_KEY, sessionId);
@@ -1454,6 +1949,7 @@ async function activatePlusCheckout(sessionId) {
       method: "POST",
       body: JSON.stringify({ sessionId }),
     });
+    if (!isCurrentAccessContext(requestContext)) return false;
     plusState.token = response.token;
     plusState.active = Boolean(response.access?.active);
     plusState.expiresAt = response.access?.expiresAt || null;
@@ -1461,17 +1957,26 @@ async function activatePlusCheckout(sessionId) {
     plusState.pendingSession = null;
     plusState.pendingCheckoutUrl = null;
     plusState.message = "Pagamento confermato. Quiz Patente Plus è attivo.";
-    storePlusTokenForUser(authState.user.id, response.token);
+    storePlusTokenForUser(requestContext.userId, response.token);
     localStorage.removeItem(PLUS_PENDING_SESSION_KEY);
     localStorage.removeItem(PLUS_PENDING_CHECKOUT_URL_KEY);
     return true;
   } catch (error) {
+    if (
+      error.stale ||
+      error.accessHandled ||
+      !isCurrentAccessContext(requestContext)
+    )
+      return false;
     plusState.message = error.message || "Non riesco ad attivare Plus.";
     plusState.recoverable = true;
     return false;
   } finally {
-    plusState.loading = false;
-    renderAuth();
+    if (isCurrentAuthContext(requestContext)) {
+      plusState.loading = false;
+      renderAuth();
+      render();
+    }
   }
 }
 
@@ -1480,7 +1985,7 @@ async function startPlusCheckout() {
     setAuthStatus("Accedi prima di acquistare Quiz Patente Plus.");
     return;
   }
-  if (plusState.active) return;
+  if (hasActivePlus()) return;
   if (plusState.pendingSession) {
     if (plusState.pendingCheckoutUrl) {
       window.location.assign(plusState.pendingCheckoutUrl);
@@ -1500,6 +2005,7 @@ async function startPlusCheckout() {
     return;
   }
 
+  const requestContext = captureAccessContext();
   plusState.loading = true;
   plusState.message = "Apro il pagamento sicuro...";
   renderPlus();
@@ -1513,6 +2019,7 @@ async function startPlusCheckout() {
         immediateAccessConsent: true,
       }),
     });
+    if (!isCurrentAccessContext(requestContext)) throw staleRequestError();
     const checkoutUrl = new URL(response.checkoutUrl || "");
     if (
       checkoutUrl.protocol !== "https:" ||
@@ -1530,6 +2037,13 @@ async function startPlusCheckout() {
     );
     window.location.assign(checkoutUrl.toString());
   } catch (error) {
+    if (error.stale || !isCurrentAccessContext(requestContext)) {
+      if (isCurrentAuthContext(requestContext)) {
+        plusState.loading = false;
+        renderPlus();
+      }
+      return;
+    }
     plusState.loading = false;
     plusState.message = error.message || "Pagamento non disponibile ora.";
     renderPlus();
@@ -1539,6 +2053,7 @@ async function startPlusCheckout() {
 async function clearPendingPlusCheckout() {
   const sessionId = plusState.pendingSession;
   if (!sessionId) return;
+  const requestContext = captureAccessContext();
 
   plusState.loading = true;
   plusState.message = "Controllo che il pagamento non sia stato completato...";
@@ -1549,6 +2064,7 @@ async function clearPendingPlusCheckout() {
       method: "POST",
       body: JSON.stringify({ sessionId }),
     });
+    if (!isCurrentAccessContext(requestContext)) return;
     if (!response.discardable) {
       throw new Error("Questo pagamento non può essere scartato.");
     }
@@ -1560,21 +2076,29 @@ async function clearPendingPlusCheckout() {
     localStorage.removeItem(PLUS_PENDING_SESSION_KEY);
     localStorage.removeItem(PLUS_PENDING_CHECKOUT_URL_KEY);
   } catch (error) {
+    if (
+      error.stale ||
+      error.accessHandled ||
+      !isCurrentAccessContext(requestContext)
+    )
+      return;
     plusState.message =
       error.message ||
       "Non posso scartare questo tentativo finché il suo stato non è certo. Riprova l’attivazione o contatta l’assistenza.";
     plusState.recoverable = true;
   } finally {
-    plusState.loading = false;
-    setProfileView("plus");
-    openAccountPanel();
-    renderAuth();
+    if (isCurrentAuthContext(requestContext)) {
+      plusState.loading = false;
+      setProfileView("plus");
+      openAccountPanel();
+      renderAuth();
+    }
   }
 }
 
 function renderPlus() {
   if (!els.plusStatus) return;
-  const active = plusState.active && plusState.expiresAt;
+  const active = hasActivePlus();
 
   if (active) {
     const expiry = new Intl.DateTimeFormat("it-IT", {
@@ -1582,7 +2106,8 @@ function renderPlus() {
       month: "long",
       year: "numeric",
     }).format(new Date(plusState.expiresAt));
-    els.plusStatus.textContent = plusState.message || `Plus attivo fino al ${expiry}.`;
+    els.plusStatus.textContent =
+      plusState.message || `Plus attivo fino al ${expiry}.`;
     els.plusBuyButton.textContent = `Plus attivo fino al ${expiry}`;
     els.plusBuyButton.disabled = true;
     els.plusResetButton.hidden = true;
@@ -1590,7 +2115,7 @@ function renderPlus() {
   } else {
     els.plusStatus.textContent =
       plusState.message ||
-      "Le simulazioni ufficiali, lo storico e i contenuti già disponibili restano gratuiti.";
+      "Free include simulazioni complete in italiano, storico e ripasso degli errori.";
     els.plusBuyButton.textContent = plusState.loading
       ? "Attendo..."
       : plusState.pendingSession
@@ -1614,19 +2139,29 @@ function setAuthStatus(message) {
 
 async function loadProgress() {
   if (!authState.token) return;
+  const requestContext = captureAuthContext();
   try {
     const response = await authFetch("./api/user-progress");
     authState.progress = response.progress;
     renderAuth();
   } catch (error) {
+    if (error.stale || !isCurrentAuthContext(requestContext)) return;
     renderProgress(null, error.message || "Progressi non disponibili.");
   }
 }
 
 function renderProgress(progress, errorMessage = "") {
-  const summary = progress?.summary ?? { total: 0, passed: 0, averageErrors: 0 };
+  const summary = progress?.summary ?? {
+    total: 0,
+    passed: 0,
+    averageErrors: 0,
+  };
   const recent = progress?.recent ?? [];
-  const revision = progress?.revision ?? { uniqueWrongQuestions: 0, totalWrongAnswers: 0, questionIds: [] };
+  const revision = progress?.revision ?? {
+    uniqueWrongQuestions: 0,
+    totalWrongAnswers: 0,
+    questionIds: [],
+  };
 
   els.progressTotal.textContent = String(summary.total);
   els.progressPassed.textContent = String(summary.passed);
@@ -1655,7 +2190,10 @@ function renderProgress(progress, errorMessage = "") {
     const item = document.createElement("button");
     item.type = "button";
     item.className = "progress-item";
-    item.setAttribute("aria-label", `Rivedi test del ${formatDate(exam.finishedAt)}`);
+    item.setAttribute(
+      "aria-label",
+      `Rivedi test del ${formatDate(exam.finishedAt)}`,
+    );
 
     const pill = document.createElement("span");
     pill.className = `result-pill ${exam.passed ? "result-pill-correct" : "result-pill-error"}`;
@@ -1682,7 +2220,9 @@ function renderProgress(progress, errorMessage = "") {
     action.textContent = "Rivedi";
 
     item.append(pill, title, detail, meta, action);
-    item.addEventListener("click", () => loadSavedExamReview(exam.examId, item));
+    item.addEventListener("click", () =>
+      loadSavedExamReview(exam.examId, item),
+    );
     els.progressList.append(item);
   });
 }
@@ -1716,7 +2256,8 @@ function renderProgressChart(recent) {
   if (!Array.isArray(recent) || recent.length === 0) {
     const empty = document.createElement("p");
     empty.className = "progress-chart-empty";
-    empty.textContent = "Qui vedrai l'andamento appena avrai completato qualche test.";
+    empty.textContent =
+      "Qui vedrai l'andamento appena avrai completato qualche test.";
     els.progressChart.append(empty);
     return;
   }
@@ -1744,7 +2285,10 @@ function renderProgressChart(recent) {
     bar.className = `progress-bar-point ${
       exam.mode === "revision" ? "revision" : exam.passed ? "passed" : "failed"
     }`;
-    bar.style.setProperty("--score", `${Math.max(8, Math.round(score * 100))}%`);
+    bar.style.setProperty(
+      "--score",
+      `${Math.max(8, Math.round(score * 100))}%`,
+    );
     bar.title = `${formatDate(exam.finishedAt)}: ${exam.correctCount}/${exam.totalQuestions} corrette`;
     bar.setAttribute(
       "aria-label",
@@ -1763,7 +2307,12 @@ function progressScore(exam) {
 }
 
 async function loadSavedExamReview(examId, trigger) {
-  if (hasActiveExamProgress() && !window.confirm("Vuoi abbandonare il test in corso e rivedere questa simulazione?")) {
+  if (
+    hasActiveExamProgress() &&
+    !window.confirm(
+      "Vuoi abbandonare il test in corso e rivedere questa simulazione?",
+    )
+  ) {
     return;
   }
 
@@ -1774,17 +2323,22 @@ async function loadSavedExamReview(examId, trigger) {
     const title = trigger.querySelector("strong");
     if (title) title.textContent = "Apro il test...";
   }
+  const requestContext = captureAuthContext();
 
   try {
-    const response = await authFetch(`./api/exam-result?examId=${encodeURIComponent(examId)}`);
+    const response = await authFetch(
+      `./api/exam-result?examId=${encodeURIComponent(examId)}`,
+    );
     const savedState = buildSavedExamState(response.exam);
-    localStorage.removeItem(STORAGE_KEY);
+    const key = sessionStorageKey();
+    if (key) localStorage.removeItem(key);
     state = savedState;
     closeAccountPanel();
     closeQuestionDrawer();
     renderResults();
     window.scrollTo({ top: 0, behavior: "smooth" });
   } catch (error) {
+    if (error.stale || !isCurrentAuthContext(requestContext)) return;
     window.alert(error.message || "Non riesco ad aprire questo test.");
   } finally {
     if (trigger) {
@@ -1815,7 +2369,9 @@ function buildSavedExamState(exam) {
 
   return {
     id: exam.examId,
-    mode: String(exam.examId || "").startsWith("revision-") ? "revision" : "simulation",
+    mode: String(exam.examId || "").startsWith("revision-")
+      ? "revision"
+      : "simulation",
     questions: entries.map((entry) => entry.question),
     answers: entries.map((entry) => entry.answer),
     currentIndex: 0,
@@ -1838,6 +2394,7 @@ async function loadAdminDashboard(force = false) {
     renderAdmin();
     return;
   }
+  const requestContext = captureAuthContext();
 
   adminState.loading = true;
   adminState.error = "";
@@ -1847,10 +2404,13 @@ async function loadAdminDashboard(force = false) {
     const response = await authFetch("./api/admin-dashboard");
     adminState.data = response.admin;
   } catch (error) {
+    if (error.stale || !isCurrentAuthContext(requestContext)) return;
     adminState.error = error.message || "Dashboard admin non disponibile.";
   } finally {
-    adminState.loading = false;
-    renderAdmin();
+    if (isCurrentAuthContext(requestContext)) {
+      adminState.loading = false;
+      renderAdmin();
+    }
   }
 }
 
@@ -1950,8 +2510,12 @@ function renderAdminUsers(users = []) {
     const detail = document.createElement("p");
     detail.className = "admin-detail";
     detail.textContent = [
-      user.lastLoginAt ? `Ultimo accesso ${formatDate(user.lastLoginAt)}` : "Nessun accesso completato",
-      user.lastTestAt ? `ultimo test ${formatDate(user.lastTestAt)}` : "nessun test",
+      user.lastLoginAt
+        ? `Ultimo accesso ${formatDate(user.lastLoginAt)}`
+        : "Nessun accesso completato",
+      user.lastTestAt
+        ? `ultimo test ${formatDate(user.lastTestAt)}`
+        : "nessun test",
     ].join(" · ");
 
     item.append(header, stats, detail);
@@ -2017,10 +2581,15 @@ function renderAdminTests(tests = []) {
     stats.append(
       createAdminMetric("Corrette", test.correctCount),
       createAdminMetric("Tempo", formatDuration(test.usedMs)),
-      createAdminMetric("Motivo", test.finishReason === "timeout" ? "Tempo" : "Manuale"),
+      createAdminMetric(
+        "Motivo",
+        test.finishReason === "timeout" ? "Tempo" : "Manuale",
+      ),
     );
 
-    const wrongAnswers = (test.answers || []).filter((answer) => answer.isCorrect === false);
+    const wrongAnswers = (test.answers || []).filter(
+      (answer) => answer.isCorrect === false,
+    );
     const answers = document.createElement("div");
     answers.className = "admin-answer-list";
 
@@ -2100,14 +2669,81 @@ function buildExamResultPayload() {
   };
 }
 
+function captureAuthContext() {
+  return {
+    token: authState.token,
+    userId: authState.user?.id ?? null,
+  };
+}
+
+function isCurrentAuthContext(context) {
+  return Boolean(
+    context &&
+      authState.token === context.token &&
+      (authState.user?.id ?? null) === context.userId,
+  );
+}
+
+function captureAccessContext() {
+  return {
+    ...captureAuthContext(),
+    plusToken: plusState.token,
+    epoch: accessEpoch,
+  };
+}
+
+function isCurrentAccessContext(context) {
+  return Boolean(
+    isCurrentAuthContext(context) &&
+      plusState.token === context.plusToken &&
+      accessEpoch === context.epoch,
+  );
+}
+
+function staleRequestError() {
+  const error = new Error("Richiesta superata da un nuovo accesso.");
+  error.stale = true;
+  return error;
+}
+
 async function authFetch(url, options = {}) {
-  return fetchJson(url, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${authState.token}`,
-      ...(options.headers ?? {}),
-    },
-  });
+  const requestContext = captureAuthContext();
+  const requestPlusToken =
+    options.headers?.["X-Quizpatente-Plus"] ??
+    options.headers?.["x-quizpatente-plus"] ??
+    null;
+  const requestAccessEpoch = accessEpoch;
+  try {
+    const payload = await fetchJson(url, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${requestContext.token}`,
+        ...(options.headers ?? {}),
+      },
+    });
+    if (!isCurrentAuthContext(requestContext)) throw staleRequestError();
+    return payload;
+  } catch (error) {
+    if (error.stale || !isCurrentAuthContext(requestContext)) {
+      error.stale = true;
+      throw error;
+    }
+    if (error.status === 401) {
+      resetToAnonymousDemo();
+      error.accessHandled = true;
+    } else if (error.status === 402) {
+      if (
+        plusState.token !== requestPlusToken ||
+        accessEpoch !== requestAccessEpoch
+      ) {
+        error.stale = true;
+        throw error;
+      }
+      downgradeToFree(error.message);
+      error.accessHandled = true;
+    }
+    throw error;
+  }
 }
 
 async function fetchJson(url, options = {}) {
@@ -2120,7 +2756,9 @@ async function fetchJson(url, options = {}) {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(payload.error || "Richiesta non riuscita.");
+    const error = new Error(payload.error || "Richiesta non riuscita.");
+    error.status = response.status;
+    throw error;
   }
   return payload;
 }
@@ -2165,7 +2803,11 @@ function formatDate(value) {
 }
 
 async function registerServiceWorker() {
-  if (!("serviceWorker" in navigator)) {
+  if (
+    !("serviceWorker" in navigator) ||
+    window.location.hostname !== "quizpatente.realb.it" ||
+    window.location.protocol !== "https:"
+  ) {
     return;
   }
 

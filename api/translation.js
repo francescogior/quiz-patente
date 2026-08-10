@@ -1,7 +1,12 @@
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
-const { authenticateRequest, publicError, readJson, sendJson } = require("../lib/user-store");
+const {
+  authenticateRequest,
+  publicError,
+  readJson,
+  sendJson,
+} = require("../lib/user-store");
 const { requirePlusAccess } = require("../lib/plus-access");
 const { consumePlusGeneration } = require("../lib/plus-usage");
 const { readJson: readCachedJson, writeJson } = require("../lib/db-kv");
@@ -13,7 +18,8 @@ const ORIGINAL_LANGUAGE = "it";
 let questionMap;
 
 module.exports = async function handler(req, res) {
-  if (req.method !== "POST") return sendJson(res, 405, { error: "Metodo non supportato." });
+  if (req.method !== "POST")
+    return sendJson(res, 405, { error: "Metodo non supportato." });
 
   let generationClaim;
   try {
@@ -43,15 +49,22 @@ module.exports = async function handler(req, res) {
       });
     }
 
+    requirePlusAccess(req, user);
     const cachePath = buildCachePath(question, language, explanation);
     const cached = await findCachedTranslation(cachePath);
     if (cached) {
       return sendJson(res, 200, { source: "cache", translation: cached });
     }
-
-    requirePlusAccess(req, user);
-    generationClaim = await consumePlusGeneration(user, "translation", cachePath);
-    const generated = await generateTranslation(question, language, explanation);
+    generationClaim = await consumePlusGeneration(
+      user,
+      "translation",
+      cachePath,
+    );
+    const generated = await generateTranslation(
+      question,
+      language,
+      explanation,
+    );
     const translation = {
       questionId: question.id,
       language,
@@ -85,7 +98,9 @@ function getQuestion(id) {
     if (!source.startsWith(prefix)) throw new Error("Dataset non valido.");
     const json = source.slice(prefix.length).replace(/;$/, "");
     const bank = JSON.parse(json);
-    questionMap = new Map(bank.questions.map((question) => [question.id, question]));
+    questionMap = new Map(
+      bank.questions.map((question) => [question.id, question]),
+    );
   }
   return questionMap.get(id) || null;
 }
@@ -93,7 +108,10 @@ function getQuestion(id) {
 function normalizeLanguage(value) {
   const raw = typeof value === "object" && value ? value : {};
   const code = String(raw.code || "").trim();
-  const label = String(raw.label || "").replace(/\s+/g, " ").trim().slice(0, 80);
+  const label = String(raw.label || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80);
   const presets = new Map([
     ["en", "Inglese"],
     ["ru", "Russo"],
@@ -104,7 +122,11 @@ function normalizeLanguage(value) {
   ]);
 
   if (!code || code === ORIGINAL_LANGUAGE) {
-    return { code: ORIGINAL_LANGUAGE, label: "Italiano originale", custom: false };
+    return {
+      code: ORIGINAL_LANGUAGE,
+      label: "Italiano originale",
+      custom: false,
+    };
   }
 
   if (presets.has(code)) {
@@ -127,7 +149,13 @@ function normalizeLanguage(value) {
 function buildCachePath(question, language, explanation) {
   const languageKey = slugLanguage(language);
   const sourceHash = hashText(
-    [PROMPT_VERSION, question.id, question.text, question.topic, explanation].join("\n"),
+    [
+      PROMPT_VERSION,
+      question.id,
+      question.text,
+      question.topic,
+      explanation,
+    ].join("\n"),
   ).slice(0, 18);
   return `${question.id}/${languageKey}-${sourceHash}.json`;
 }
@@ -161,7 +189,8 @@ async function saveCachedTranslation(cachePath, translation) {
     await writeJson(BUCKET, cachePath, translation);
   } catch (error) {
     console.error("Translation cache write failed", { message: error.message });
-    error.publicMessage = "Non riesco a salvare la nuova traduzione. Riprova tra poco.";
+    error.publicMessage =
+      "Non riesco a salvare la nuova traduzione. Riprova tra poco.";
     error.statusCode = 503;
     throw error;
   }
@@ -210,10 +239,18 @@ async function generateTranslation(question, language, explanation) {
           schema: {
             type: "object",
             additionalProperties: false,
-            required: ["translated_topic", "translated_question", "translated_explanation"],
+            required: [
+              "translated_topic",
+              "translated_question",
+              "translated_explanation",
+            ],
             properties: {
               translated_topic: { type: "string", maxLength: 180 },
-              translated_question: { type: "string", minLength: 1, maxLength: 1200 },
+              translated_question: {
+                type: "string",
+                minLength: 1,
+                maxLength: 1200,
+              },
               translated_explanation: { type: "string", maxLength: 1600 },
             },
           },
@@ -224,7 +261,9 @@ async function generateTranslation(question, language, explanation) {
 
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    const error = new Error(payload?.error?.message || "OpenAI non disponibile.");
+    const error = new Error(
+      payload?.error?.message || "OpenAI non disponibile.",
+    );
     error.publicMessage = "Traduzione non disponibile ora.";
     error.statusCode = 502;
     throw error;

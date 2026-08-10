@@ -40,7 +40,13 @@ body {
     linear-gradient(180deg, #eef3ee, #faf8f2 62%, #f7faf6);
   color: var(--ink);
   font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
 }
 
 body::before {
@@ -83,10 +89,16 @@ button:disabled {
   opacity: 0.42;
 }
 
+:where(button, input, select, textarea, a, [tabindex]):focus-visible {
+  outline: 3px solid rgba(26, 135, 165, 0.72);
+  outline-offset: 3px;
+}
+
 .app-shell {
   width: min(100%, 1180px);
   margin: 0 auto;
-  padding: max(18px, env(safe-area-inset-top)) 18px max(22px, env(safe-area-inset-bottom));
+  padding: max(18px, env(safe-area-inset-top)) 18px
+    max(22px, env(safe-area-inset-bottom));
 }
 
 .topbar {
@@ -239,7 +251,12 @@ button:disabled {
   width: 0;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #f4c84b 0, var(--green) 48%, var(--aqua) 100%);
+  background: linear-gradient(
+    90deg,
+    #f4c84b 0,
+    var(--green) 48%,
+    var(--aqua) 100%
+  );
   box-shadow: 0 0 18px rgba(26, 135, 165, 0.36);
   transition: width 180ms ease;
 }
@@ -392,6 +409,26 @@ button:disabled {
   text-transform: none;
 }
 
+.question-plus-cta {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0 13px;
+  border: 1px solid rgba(217, 154, 43, 0.36);
+  border-radius: 999px;
+  background: #fff4d6;
+  color: #76500e;
+  font-size: 0.78rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.auth-loading-panel #questionText {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  text-align: center;
+}
+
 #questionText {
   grid-area: question;
   width: 100%;
@@ -419,7 +456,11 @@ button:disabled {
   overflow: auto;
   border: 1px solid rgba(26, 135, 165, 0.18);
   border-radius: 16px;
-  background: linear-gradient(135deg, rgba(26, 135, 165, 0.08), rgba(244, 200, 75, 0.08));
+  background: linear-gradient(
+    135deg,
+    rgba(26, 135, 165, 0.08),
+    rgba(244, 200, 75, 0.08)
+  );
 }
 
 .question-translation span,
@@ -703,6 +744,7 @@ body.drawer-open .question-drawer {
   width: min(560px, calc(100% - 36px));
   padding: 18px;
   overflow: auto;
+  overscroll-behavior: contain;
   border: 1px solid rgba(255, 255, 255, 0.68);
   border-radius: 26px;
   background: rgba(255, 253, 250, 0.97);
@@ -740,6 +782,18 @@ body.account-open .account-panel {
   align-content: start;
   gap: 14px;
   min-width: 0;
+}
+
+.auth-intro {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid rgba(25, 119, 86, 0.14);
+  border-radius: 14px;
+  background: #f4faf7;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 720;
+  line-height: 1.45;
 }
 
 .auth-form {
@@ -1133,6 +1187,35 @@ body.account-open .account-panel {
   background:
     linear-gradient(135deg, rgba(26, 135, 165, 0.07), rgba(244, 200, 75, 0.08)),
     #fffefa;
+}
+
+.translation-settings,
+.translation-upgrade {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.translation-upgrade {
+  padding: 12px;
+  border: 1px solid rgba(217, 154, 43, 0.28);
+  border-radius: 16px;
+  background: rgba(255, 244, 214, 0.72);
+}
+
+.translation-upgrade p {
+  margin: 0;
+  color: #63563f;
+  font-size: 0.86rem;
+  font-weight: 740;
+  line-height: 1.4;
+}
+
+.translation-upgrade .primary-button {
+  border: 1px solid rgba(92, 55, 0, 0.14);
+  background: #ffc94d;
+  color: #3c2600;
+  box-shadow: none;
 }
 
 .language-card label,
@@ -1567,7 +1650,52 @@ body.account-open .account-panel {
 }
 
 .result-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
   margin-bottom: 16px;
+}
+
+.demo-registration-card,
+.tier-upgrade-card {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+  padding: clamp(16px, 3vw, 22px);
+  border: 1px solid rgba(217, 154, 43, 0.34);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 96% 0, rgba(255, 211, 91, 0.22), transparent 44%),
+    linear-gradient(145deg, #fffdf6, #fff8df);
+}
+
+.demo-registration-card h3,
+.tier-upgrade-card h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: clamp(1.15rem, 3vw, 1.45rem);
+}
+
+.demo-registration-card p,
+.tier-upgrade-card p {
+  margin: 0;
+  color: #63563f;
+  font-weight: 720;
+  line-height: 1.45;
+}
+
+.demo-registration-card .primary-button,
+.tier-upgrade-card .primary-button {
+  justify-self: start;
+  min-width: 190px;
+  border: 1px solid rgba(19, 54, 52, 0.1);
+  background: var(--forest);
+  color: white;
+  box-shadow: 0 12px 24px rgba(6, 63, 61, 0.18);
+}
+
+.tier-upgrade-card {
+  margin-top: 0;
 }
 
 .review-list {
@@ -2131,6 +2259,11 @@ body.account-open .account-panel {
     border-radius: 14px;
   }
 
+  .question-plus-cta {
+    width: 100%;
+    border-radius: 14px;
+  }
+
   .question-language select {
     max-width: 62vw;
   }
@@ -2213,7 +2346,8 @@ body.account-open .account-panel {
     bottom: 0;
     left: 0;
     width: auto;
-    max-height: min(80vh, 620px);
+    max-height: min(92vh, 620px);
+    max-height: min(92dvh, 620px);
     padding: 16px 16px max(18px, env(safe-area-inset-bottom));
     border-bottom: 0;
     border-radius: 26px 26px 0 0;
@@ -2235,6 +2369,13 @@ body.account-open .account-panel {
 
   .revision-card .primary-button {
     width: 100%;
+  }
+
+  .demo-registration-card .primary-button,
+  .tier-upgrade-card .primary-button,
+  .translation-upgrade .primary-button {
+    width: 100%;
+    justify-self: stretch;
   }
 
   .progress-chart {
